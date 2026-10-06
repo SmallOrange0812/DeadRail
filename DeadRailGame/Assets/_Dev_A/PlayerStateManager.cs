@@ -9,10 +9,12 @@ public class PlayerStateManager : NetworkBehaviour
 
     public GameObject uiCanvas;
     public GameObject player3DModel;
-    public MonoBehaviour movementScript;
+    public PlayerMovement movementScript;
 
     public override void Spawned()
     {
+        
+
         if (HasStateAuthority)
         {
             CameraFollow camFollow = Camera.main.gameObject.GetComponent<CameraFollow>();
