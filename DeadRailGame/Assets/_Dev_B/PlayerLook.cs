@@ -1,38 +1,38 @@
-using Fusion;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-public class PlayerLook : NetworkBehaviour
+public class PlayerLook : MonoBehaviour
 {
-    [Header("Look Settings")]
-    public float mouseSensitivity = 15f;
+    [Header("카메라 세팅")]
+    public float mouseSensitivity = 10f;
     public Transform playerBody;
 
     private float xRotation = 0f;
-    private bool isFirstFrame = true; // 추가: 첫 프레임 마우스 튐 현상 방지 플래그
+
+    // 1프레임이 아닌 시작 직후 0.1초 동안 넉넉하게 마우스 입력 무시
+    private float ignoreInputTime = 0.1f;
 
     private void Start()
     {
         Cursor.lockState = CursorLockMode.Locked;
 
-        // 팁: 에디터에서 잡아둔 카메라의 기본 각도를 그대로 가져와서 시작하도록 보정
+        // 현재 유니티 에디터에 세팅된 카메라의 위아래 각도를 그대로 가져와서 시작값으로 맞춤
         xRotation = transform.localRotation.eulerAngles.x;
-        if (xRotation > 180f) xRotation -= 360f;
+        if (xRotation > 180f) xRotation -= 360f; // 0~360도 체계를 -180~180도로 변환
     }
 
     private void Update()
     {
-        if (!HasStateAuthority) return;
+        // 0.1초가 지나기 전까지는 튐 현상이 끝날 때까지 기다림(return)
+        if (ignoreInputTime > 0f)
+        {
+            ignoreInputTime -= Time.deltaTime;
+            return;
+        }
+
         if (Mouse.current == null) return;
 
         Vector2 mouseDelta = Mouse.current.delta.ReadValue();
-
-        // [핵심] 커서가 중앙으로 강제 이동하며 발생하는 첫 프레임의 비정상적인 쓰레기값을 무시합니다.
-        if (isFirstFrame)
-        {
-            isFirstFrame = false;
-            return;
-        }
 
         float mouseX = mouseDelta.x * mouseSensitivity * Time.deltaTime;
         float mouseY = mouseDelta.y * mouseSensitivity * Time.deltaTime;
@@ -41,6 +41,10 @@ public class PlayerLook : NetworkBehaviour
         xRotation = Mathf.Clamp(xRotation, -90f, 90f);
 
         transform.localRotation = Quaternion.Euler(xRotation, 0f, 0f);
-        playerBody.Rotate(Vector3.up * mouseX);
+
+        if (playerBody != null)
+        {
+            playerBody.Rotate(Vector3.up * mouseX);
+        }
     }
 }
