@@ -8,11 +8,25 @@ public class NetworkManager : MonoBehaviour
 
     async void Start()
     {
-        // 1. 네트워크 러너(엔진) 생성
+        // 1. 씬에 이미 통신 관리자(러너)가 있는지 확인
+        NetworkRunner existingRunner = FindObjectOfType<NetworkRunner>();
+
+        // [상황 A] 로비에서 접속을 완료하고 게임 씬으로 넘어온 경우
+        if (existingRunner != null && existingRunner.IsRunning)
+        {
+            _runner = existingRunner; // 로비에서 가져온 러너를 그대로 사용
+
+            // 씬 로딩 안정화를 위해 1초 대기 후 내 캐릭터 스폰
+            await System.Threading.Tasks.Task.Delay(1000);
+            _runner.Spawn(playerPrefab, new Vector3(0, 1, 0), Quaternion.identity, _runner.LocalPlayer);
+
+            return; // ★ 접속은 로비에서 이미 했으므로 아래쪽 [상황 B] 코드는 무시하고 마칩니다.
+        }
+
+        // [상황 B] 로비를 거치지 않고 게임 씬에서 바로 Play를 누른 경우 (테스트용)
         _runner = gameObject.AddComponent<NetworkRunner>();
         _runner.ProvideInput = true;
 
-        // 2. Shared 모드로 방 생성 및 접속
         var result = await _runner.StartGame(new StartGameArgs()
         {
             GameMode = GameMode.Shared,
@@ -21,12 +35,10 @@ public class NetworkManager : MonoBehaviour
             SceneManager = gameObject.AddComponent<NetworkSceneManagerDefault>()
         });
 
-        // 3. 방 접속에 성공하면 딜레이 후 내 캐릭터 스폰
+        // 방 접속에 성공하면 1초 뒤 스폰
         if (result.Ok)
         {
-            // 수정된 부분: Task 앞에 System.Threading.Tasks. 를 붙여서 명확하게 해줍니다.
             await System.Threading.Tasks.Task.Delay(1000);
-
             _runner.Spawn(playerPrefab, new Vector3(0, 1, 0), Quaternion.identity, _runner.LocalPlayer);
         }
         else
