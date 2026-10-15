@@ -3,58 +3,109 @@ using UnityEngine;
 
 public class PlayerMovement : NetworkBehaviour
 {
-    public float treadmillMultiplier = 1f; // 런닝머신 밀림 속도 미세 조정 비율 (올바른 위치)
-
     private CharacterController _controller;
     public float moveSpeed = 5f;
-    public float rotationSpeed = 10f; // 캐릭터가 회전하는 속도
+
+    [Header("마우스 회전 설정")]
+    public float mouseSensitivity = 2f; // 마우스 감도
+    private float _cameraPitch = 0f; // 카메라 위아래 각도
+
+    [Header("중력 설정")]
+    public float gravity = -9.81f;
+    private float _velocityY;
 
     [Header("애니메이션")]
     public Animator anim;
+
+    [Header("카메라 설정")]
+    public Camera fpsCamera;
+    private Camera _mainCamera;
+    private bool _isFpsMode = false;
 
     private void Awake()
     {
         _controller = GetComponent<CharacterController>();
     }
 
+    public override void Spawned()
+    {
+        // 내 캐릭터일 때만 카메라 및 마우스 세팅
+        if (HasStateAuthority)
+        {
+            _mainCamera = Camera.main;
+            if (fpsCamera != null) fpsCamera.gameObject.SetActive(false);
+
+            // 마우스 커서를 숨기고 화면 중앙에 고정 (FPS 기본 세팅)
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible = false;
+        }
+        else
+        {
+            // 남의 카메라는 끕니다.
+            if (fpsCamera != null) fpsCamera.gameObject.SetActive(false);
+        }
+    }
+
+    public override void Render()
+    {
+        if (HasStateAuthority == false) return;
+
+        // V키를 누르면 1인칭 <-> 3인칭 전환
+        if (Input.GetKeyDown(KeyCode.V))
+        {
+            _isFpsMode = !_isFpsMode;
+            if (fpsCamera != null) fpsCamera.gameObject.SetActive(_isFpsMode);
+            if (_mainCamera != null) _mainCamera.gameObject.SetActive(!_isFpsMode);
+        }
+    }
+
     public override void FixedUpdateNetwork()
     {
         if (HasStateAuthority == false) return;
 
-        // 1. 키보드 입력에 따른 플레이어의 자체 이동 방향
-        float moveX = Input.GetAxisRaw("Horizontal");
-        float moveZ = Input.GetAxisRaw("Vertical");
-        Vector3 move = new Vector3(moveX, 0, moveZ);
+        // 1. 마우스 회전 (화면 돌리기)
+        float mouseX = Input.GetAxis("Mouse X") * mouseSensitivity;
+        float mouseY = Input.GetAxis("Mouse Y") * mouseSensitivity;
 
-        // 플레이어의 이동 속도를 담을 변수 (방향 * 속도)
-        Vector3 playerVelocity = Vector3.zero;
+        // 좌우 회전: 캐릭터 전체를 Y축 기준으로 회전시킵니다.
+        transform.Rotate(Vector3.up * mouseX);
 
-        if (move.sqrMagnitude > 0)
+        // 위아래 회전: 1인칭 모드일 때만 카메라 자체를 X축 기준으로 회전시킵니다.
+        if (fpsCamera != null && _isFpsMode)
         {
-            move.Normalize();
-            // 캐릭터 회전
-            transform.forward = Vector3.Slerp(transform.forward, move, Runner.DeltaTime * rotationSpeed);
-            // 플레이어 자체 이동 속도 적용
-            playerVelocity = move * moveSpeed;
+            _cameraPitch -= mouseY;
+            _cameraPitch = Mathf.Clamp(_cameraPitch, -85f, 85f); // 목이 완전히 뒤로 꺾이지 않도록 각도 제한
+            fpsCamera.transform.localEulerAngles = new Vector3(_cameraPitch, 0f, 0f);
         }
 
-        // 최종 속도를 계산할 변수
+        // 2. 이동 방향 계산 (캐릭터가 바라보는 앞/옆 기준)
+        float moveX = Input.GetAxisRaw("Horizontal"); // A, D
+        float moveZ = Input.GetAxisRaw("Vertical");   // W, S
+
+        // transform.right(오른쪽)와 transform.forward(앞)를 기준으로 이동 벡터를 만듭니다.
+        Vector3 move = (transform.right * moveX + transform.forward * moveZ).normalized;
+        Vector3 playerVelocity = move * moveSpeed;
+
+        // 3. 중력 적용
+        if (_controller.isGrounded)
+        {
+            _velocityY = -2f;
+        }
+        else
+        {
+            _velocityY += gravity * Runner.DeltaTime;
+        }
+
+        // 4. 최종 이동 처리
         Vector3 finalVelocity = playerVelocity;
+        finalVelocity.y = _velocityY;
 
-        // 2. 트레드밀(기차) 속도 강제 적용
-        if (TreadmillManager.Instance != null && TreadmillManager.Instance.isSpawned)
-        {
-            float treadmillSpeed = TreadmillManager.Instance.CurrentSpeed;
-            // Z축 뒤쪽(Vector3.back)으로 매니저 속도에 배수를 곱하여 밀어내는 힘을 더해줍니다.
-            finalVelocity += Vector3.back * (treadmillSpeed * treadmillMultiplier);
-        }
-
-        // 3. 최종 속도로 캐릭터 이동 (FixedUpdateNetwork에서는 Runner.DeltaTime 사용)
         _controller.Move(finalVelocity * Runner.DeltaTime);
 
+        // 애니메이션 속도 전달 (입력값이 있으면 걷기/뛰기 재생)
         if (anim != null)
         {
-            anim.SetFloat("Speed", move.sqrMagnitude);
+            anim.SetFloat("Speed", new Vector2(moveX, moveZ).sqrMagnitude);
         }
     }
 }

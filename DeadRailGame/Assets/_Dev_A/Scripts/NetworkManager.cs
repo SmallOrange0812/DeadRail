@@ -39,7 +39,7 @@ public class NetworkManager : MonoBehaviour
         if (result.Ok)
         {
             await System.Threading.Tasks.Task.Delay(1000);
-            _runner.Spawn(playerPrefab, new Vector3(0, 1, 0), Quaternion.identity, _runner.LocalPlayer);
+            _runner.Spawn(playerPrefab, new Vector3(0, 1.5f, 0), Quaternion.identity, _runner.LocalPlayer);
         }
         else
         {
