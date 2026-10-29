@@ -7,8 +7,19 @@ public class PlayerMovement : NetworkBehaviour
     public float moveSpeed = 5f;
 
     [Header("마우스 회전 설정")]
-    public float mouseSensitivity = 2f; // 마우스 감도
-    private float _cameraPitch = 0f; // 카메라 위아래 각도
+    public float mouseSensitivity = 2f;
+    [Networked] public float CameraPitch { get; set; }
+
+    [Header("분기점 연출 및 탐조등 카메라 전환 연동용")]
+    [HideInInspector] public float ExternalCameraRoll = 0f;
+    [HideInInspector] public Vector3 ExternalCameraShake = Vector3.zero;
+    [HideInInspector] public Transform CameraOverrideTarget = null;
+
+    [Header("카메라 망원 줌(Zoom) 설정 (마우스 휠 또는 Z키)")]
+    public float normalFOV = 60f;
+    public float minZoomFOV = 20f; // 숫자가 작을수록 멀리 있는 표지판이 크게 확대됨!
+    public float zoomSpeed = 10f;
+    private float _targetFOV = 60f;
 
     [Header("중력 설정")]
     public float gravity = -9.81f;
@@ -20,7 +31,9 @@ public class PlayerMovement : NetworkBehaviour
     [Header("카메라 설정")]
     public Camera fpsCamera;
     private Camera _mainCamera;
-    private bool _isFpsMode = false;
+    private bool _isFpsMode = true;
+
+    private Vector3 _initFpsCamLocalPos;
 
     private void Awake()
     {
@@ -29,19 +42,29 @@ public class PlayerMovement : NetworkBehaviour
 
     public override void Spawned()
     {
-        // 내 캐릭터일 때만 카메라 및 마우스 세팅
         if (HasStateAuthority)
         {
             _mainCamera = Camera.main;
-            if (fpsCamera != null) fpsCamera.gameObject.SetActive(false);
 
-            // 마우스 커서를 숨기고 화면 중앙에 고정 (FPS 기본 세팅)
+            if (fpsCamera != null)
+            {
+                _initFpsCamLocalPos = fpsCamera.transform.localPosition;
+                fpsCamera.nearClipPlane = 0.25f;
+                normalFOV = fpsCamera.fieldOfView;
+                _targetFOV = normalFOV;
+                fpsCamera.gameObject.SetActive(true);
+            }
+
+            if (_mainCamera != null && _mainCamera != fpsCamera)
+            {
+                _mainCamera.gameObject.SetActive(false);
+            }
+
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;
         }
         else
         {
-            // 남의 카메라는 끕니다.
             if (fpsCamera != null) fpsCamera.gameObject.SetActive(false);
         }
     }
@@ -55,7 +78,36 @@ public class PlayerMovement : NetworkBehaviour
         {
             _isFpsMode = !_isFpsMode;
             if (fpsCamera != null) fpsCamera.gameObject.SetActive(_isFpsMode);
-            if (_mainCamera != null) _mainCamera.gameObject.SetActive(!_isFpsMode);
+            if (_mainCamera != null && _mainCamera != fpsCamera) _mainCamera.gameObject.SetActive(!_isFpsMode);
+        }
+
+        // 🔭 마우스 휠 스크롤 또는 Z키로 멀리 있는 표지판 확대(Zoom-In) 기능!
+        float scroll = Input.GetAxis("Mouse ScrollWheel");
+        if (Mathf.Abs(scroll) > 0.01f)
+        {
+            _targetFOV = Mathf.Clamp(_targetFOV - scroll * 35f, minZoomFOV, normalFOV);
+        }
+        if (Input.GetKeyDown(KeyCode.Z))
+        {
+            // Z키를 누르면 즉시 최대 확대(20도) <-> 기본 화각(60도) 토글!
+            _targetFOV = (_targetFOV > minZoomFOV + 5f) ? minZoomFOV : normalFOV;
+        }
+
+        if (fpsCamera != null)
+        {
+            fpsCamera.fieldOfView = Mathf.Lerp(fpsCamera.fieldOfView, _targetFOV, Time.deltaTime * zoomSpeed);
+
+            if (CameraOverrideTarget != null)
+            {
+                fpsCamera.transform.position = CameraOverrideTarget.position + CameraOverrideTarget.forward * 0.4f + ExternalCameraShake;
+                Quaternion lookRot = Quaternion.LookRotation(CameraOverrideTarget.up, CameraOverrideTarget.forward);
+                fpsCamera.transform.rotation = lookRot * Quaternion.Euler(0f, 0f, ExternalCameraRoll);
+            }
+            else
+            {
+                fpsCamera.transform.localPosition = _initFpsCamLocalPos + ExternalCameraShake;
+                fpsCamera.transform.localEulerAngles = new Vector3(CameraPitch, 0f, ExternalCameraRoll);
+            }
         }
     }
 
@@ -63,30 +115,22 @@ public class PlayerMovement : NetworkBehaviour
     {
         if (HasStateAuthority == false) return;
 
-        // 1. 마우스 회전 (화면 돌리기)
-        float mouseX = Input.GetAxis("Mouse X") * mouseSensitivity;
-        float mouseY = Input.GetAxis("Mouse Y") * mouseSensitivity;
+        // 줌인 상태일 때는 정밀 조준을 위해 마우스 감도를 살짝 낮춰줌
+        float zoomRatio = (fpsCamera != null) ? (fpsCamera.fieldOfView / normalFOV) : 1f;
+        float currentSensitivity = mouseSensitivity * Mathf.Clamp(zoomRatio, 0.35f, 1f);
 
-        // 좌우 회전: 캐릭터 전체를 Y축 기준으로 회전시킵니다.
+        float mouseX = Input.GetAxis("Mouse X") * currentSensitivity;
+        float mouseY = Input.GetAxis("Mouse Y") * currentSensitivity;
+
         transform.Rotate(Vector3.up * mouseX);
+        CameraPitch = Mathf.Clamp(CameraPitch - mouseY, -85f, 85f);
 
-        // 위아래 회전: 1인칭 모드일 때만 카메라 자체를 X축 기준으로 회전시킵니다.
-        if (fpsCamera != null && _isFpsMode)
-        {
-            _cameraPitch -= mouseY;
-            _cameraPitch = Mathf.Clamp(_cameraPitch, -85f, 85f); // 목이 완전히 뒤로 꺾이지 않도록 각도 제한
-            fpsCamera.transform.localEulerAngles = new Vector3(_cameraPitch, 0f, 0f);
-        }
+        float moveX = Input.GetAxisRaw("Horizontal");
+        float moveZ = Input.GetAxisRaw("Vertical");
 
-        // 2. 이동 방향 계산 (캐릭터가 바라보는 앞/옆 기준)
-        float moveX = Input.GetAxisRaw("Horizontal"); // A, D
-        float moveZ = Input.GetAxisRaw("Vertical");   // W, S
-
-        // transform.right(오른쪽)와 transform.forward(앞)를 기준으로 이동 벡터를 만듭니다.
         Vector3 move = (transform.right * moveX + transform.forward * moveZ).normalized;
         Vector3 playerVelocity = move * moveSpeed;
 
-        // 3. 중력 적용
         if (_controller.isGrounded)
         {
             _velocityY = -2f;
@@ -96,13 +140,11 @@ public class PlayerMovement : NetworkBehaviour
             _velocityY += gravity * Runner.DeltaTime;
         }
 
-        // 4. 최종 이동 처리
         Vector3 finalVelocity = playerVelocity;
         finalVelocity.y = _velocityY;
 
         _controller.Move(finalVelocity * Runner.DeltaTime);
 
-        // 애니메이션 속도 전달 (입력값이 있으면 걷기/뛰기 재생)
         if (anim != null)
         {
             anim.SetFloat("Speed", new Vector2(moveX, moveZ).sqrMagnitude);

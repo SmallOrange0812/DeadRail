@@ -1,199 +1,271 @@
 using System.Collections;
 using UnityEngine;
+using UnityEngine.InputSystem;
+using Fusion;
 
-public class HarpoonFarming : MonoBehaviour
+public class HarpoonFarming : NetworkBehaviour
 {
-    public Camera p2Camera;
+    [Header("References")]
     public LineRenderer lineRenderer;
-    public float pullSpeed = 15f;
+    [Tooltip("작살 줄이 시작될 위치 (없으면 캐릭터 가슴 높이에서 발사)")]
+    public Transform harpoonMuzzle;
+
+    [Header("Magnetic Net / Harpoon Settings (광역 그물 작살)")]
+    [Tooltip("주행 중 파밍을 쉽게 하기 위한 그물/자기장 판정 반경")]
+    public float netRadius = 1.5f;
+    public float basePullSpeed = 20f;
     public float maxDistance = 500f;
+    public int harpoonDamage = 1;
 
     [Header("Harpoon Status")]
-    public bool hasHarpoon = false; // 작살 무기 획득 여부
+    [Tooltip("체크되어 있으면 처음부터 허공/장애물/스위치 사격 가능")]
+    public bool hasHarpoon = true;
+
+    // --- Photon Fusion 네트워크 동기화 변수 (LineRenderer 공유용) ---
+    [Networked] private NetworkBool IsLineActive { get; set; }
+    [Networked] private Vector3 LineStart { get; set; }
+    [Networked] private Vector3 LineEnd { get; set; }
 
     private bool isFarming = false;
+    private Camera[] playerCameras;
 
-    void Start()
+    public override void Spawned()
     {
-        if (p2Camera == null) p2Camera = Camera.main;
-        if (lineRenderer == null) lineRenderer = GetComponentInChildren<LineRenderer>();
+        if (lineRenderer == null) lineRenderer = GetComponentInChildren<LineRenderer>(true);
 
         if (lineRenderer != null)
         {
             lineRenderer.enabled = false;
             lineRenderer.positionCount = 2;
+            lineRenderer.startWidth = 0.05f;
+            lineRenderer.endWidth = 0.05f;
         }
+
+        playerCameras = GetComponentsInChildren<Camera>(true);
     }
 
-    void Update()
+    private void Update()
     {
-        // 마우스 클릭 시 Raycast 사격
-        if (Input.GetMouseButtonDown(0) && !isFarming)
+        if (!HasStateAuthority) return;
+
+        if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame && !isFarming)
         {
             TryFarming();
         }
     }
 
-    void TryFarming()
+    public override void Render()
     {
-        // 🎯 1. 기존 중앙 고정이 아닌, 현재 마우스 위치에서 광선(Ray)을 쏩니다.
-        Ray ray = p2Camera.ScreenPointToRay(Input.mousePosition);
-        Vector3 myBody = transform.position + Vector3.up * 1.0f;
+        if (lineRenderer == null) return;
 
-        // 장애물 코앞 겹침 대비용으로 RaycastAll 적용
-        RaycastHit[] hits = Physics.RaycastAll(ray, 1000f);
-        System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
-
-        bool hitSomething = false;
-
-        foreach (RaycastHit hit in hits)
+        lineRenderer.enabled = IsLineActive;
+        if (IsLineActive)
         {
-            // 플레이어 자신은 충돌에서 통과시킴
-            if (hit.transform.root == this.transform.root) continue;
-
-            hitSomething = true;
-
-            if (hit.transform.CompareTag("Item"))
-            {
-                Debug.Log("명중: 아이템 당기기 시작!");
-                StartCoroutine(PullItem(hit.transform));
-                return;
-            }
-            else if (hit.transform.CompareTag("Obstacle"))
-            {
-                if (!hasHarpoon) return;
-                Debug.Log("명중: 장애물 파괴!");
-                StartCoroutine(HitObstacle(hit.transform, hit.point));
-                return;
-            }
-            else
-            {
-                if (!hasHarpoon) return;
-                Debug.Log("빗나감: 일반 벽/바닥 맞춤");
-                StartCoroutine(DrawLineShort(myBody, hit.point));
-                return;
-            }
-        }
-
-        if (!hitSomething)
-        {
-            if (!hasHarpoon) return;
-            Debug.Log("빗나감: 허공을 쏨");
-            Vector3 missPoint = ray.origin + ray.direction * maxDistance;
-            StartCoroutine(DrawLineShort(myBody, missPoint));
+            lineRenderer.SetPosition(0, LineStart);
+            lineRenderer.SetPosition(1, LineEnd);
         }
     }
 
-    IEnumerator PullItem(Transform targetItem)
+    private Camera GetActiveCamera()
+    {
+        if (playerCameras != null)
+        {
+            foreach (Camera cam in playerCameras)
+            {
+                if (cam != null && cam.isActiveAndEnabled && cam.gameObject.activeInHierarchy)
+                    return cam;
+            }
+        }
+        return Camera.main;
+    }
+
+    private Vector3 GetOriginPos()
+    {
+        return harpoonMuzzle != null ? harpoonMuzzle.position : transform.position + Vector3.up * 1.2f;
+    }
+
+    // 기차 주행 속도를 고려한 최종 견인 속도 계산
+    private float GetEffectivePullSpeed()
+    {
+        float trainSpeed = 0f;
+        // TreadmillManager가 존재하고 속도 변수가 있다면 반영 (추후 팀원 코드의 변수명에 맞춰 자동 연동)
+        if (TreadmillManager.Instance != null)
+        {
+            // 만약 팀원의 TreadmillManager 속도 변수명이 다르다면 이 부분만 맞춰주면 됩니다.
+            // trainSpeed = TreadmillManager.Instance.CurrentSpeed;
+        }
+        return basePullSpeed + trainSpeed;
+    }
+
+    private void TryFarming()
+    {
+        Camera activeCam = GetActiveCamera();
+        if (activeCam == null)
+        {
+            Debug.LogWarning("❌ [HarpoonFarming] 활성화된 카메라를 찾을 수 없습니다!");
+            return;
+        }
+
+        // 1. 화면 정중앙에서 광선 생성
+        Vector3 screenCenter = new Vector3(Screen.width / 2f, Screen.height / 2f, 0f);
+        Ray ray = activeCam.ScreenPointToRay(screenCenter);
+        Vector3 startPos = GetOriginPos();
+
+        // 2. 주행 중 파밍 개선: 얇은 RaycastAll 대신 넉넉한 반경(netRadius)의 SphereCastAll 사용!
+        RaycastHit[] hits = Physics.SphereCastAll(ray, netRadius, maxDistance);
+        System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
+
+        // 1순위: 범위 안에 아이템(Item)이 있으면 무조건 아이템부터 최우선으로 낚아챔!
+        foreach (RaycastHit hit in hits)
+        {
+            if (hit.transform.root == this.transform.root) continue;
+
+            if (hit.transform.CompareTag("Item"))
+            {
+                Debug.Log($"🎣 [그물 작살 명중] 보급품 포착: {hit.transform.name}");
+                StartCoroutine(PullItemCoroutine(hit.transform));
+                return;
+            }
+        }
+
+        // 2순위: 아이템이 없을 때는 정확한 중심선(Raycast) 기준으로 스위치/장애물/벽 타격 판정
+        if (Physics.Raycast(ray, out RaycastHit directHit, maxDistance))
+        {
+            if (directHit.transform.root != this.transform.root)
+            {
+                if (directHit.transform.CompareTag("TrackSwitch"))
+                {
+                    Debug.Log("🔀 [작살 명중] 선로 변환기(TrackSwitch) 타격!");
+                    StartCoroutine(HitSwitchOrObstacleCoroutine(directHit.transform, directHit.point, isSwitch: true));
+                    return;
+                }
+                else if (directHit.transform.CompareTag("Obstacle"))
+                {
+                    if (!hasHarpoon) return;
+                    Debug.Log("💥 [작살 명중] 전방 장애물 타격!");
+                    StartCoroutine(HitSwitchOrObstacleCoroutine(directHit.transform, directHit.point, isSwitch: false));
+                    return;
+                }
+                else
+                {
+                    if (!hasHarpoon) return;
+                    Debug.Log($"🧱 [작살 빗나감] 지형/사물 맞춤: {directHit.transform.name}");
+                    StartCoroutine(DrawLineShortCoroutine(startPos, directHit.point));
+                    return;
+                }
+            }
+        }
+
+        // 3순위: 허공 발사
+        if (hasHarpoon)
+        {
+            Debug.Log("💨 [작살 빗나감] 허공 발사!");
+            Vector3 missPoint = ray.origin + ray.direction * maxDistance;
+            StartCoroutine(DrawLineShortCoroutine(startPos, missPoint));
+        }
+    }
+
+    private IEnumerator PullItemCoroutine(Transform targetItem)
     {
         isFarming = true;
-
-        if (lineRenderer != null)
-        {
-            lineRenderer.enabled = true;
-            lineRenderer.startWidth = 0.05f;
-            lineRenderer.endWidth = 0.05f;
-        }
+        IsLineActive = true;
 
         Collider[] colliders = targetItem.GetComponentsInChildren<Collider>();
-        foreach (Collider col in colliders)
-        {
-            col.enabled = false;
-        }
+        foreach (Collider col in colliders) col.enabled = false;
 
         Rigidbody itemRb = targetItem.GetComponent<Rigidbody>();
         if (itemRb != null) itemRb.isKinematic = true;
 
         float timeout = 10.0f;
-        Vector3 myBody = transform.position + Vector3.up * 1.0f;
 
-        while (targetItem != null && Vector3.Distance(targetItem.position, myBody) > 0.1f && timeout > 0)
+        while (targetItem != null && Vector3.Distance(targetItem.position, GetOriginPos()) > 0.3f && timeout > 0f)
         {
             timeout -= Time.deltaTime;
-            myBody = transform.position + Vector3.up * 1.0f;
+            Vector3 currentStart = GetOriginPos();
+            float currentPullSpeed = GetEffectivePullSpeed();
 
-            if (lineRenderer != null)
-            {
-                lineRenderer.SetPosition(0, myBody);
-                lineRenderer.SetPosition(1, targetItem.position);
-            }
+            targetItem.position = Vector3.MoveTowards(targetItem.position, currentStart, currentPullSpeed * Time.deltaTime);
 
-            targetItem.position = Vector3.MoveTowards(targetItem.position, myBody, pullSpeed * Time.deltaTime);
+            LineStart = currentStart;
+            LineEnd = targetItem.position;
+
             yield return null;
         }
 
         if (targetItem != null)
         {
-            Destroy(targetItem.gameObject);
-            Debug.Log("아이템 획득 완료!");
+            RaycastWeapon weapon = GetComponent<RaycastWeapon>();
+            if (weapon != null) weapon.AcquireWeapon();
 
-            hasHarpoon = true; // 아이템을 먹었으므로 무기 활성화
+            hasHarpoon = true;
+            Destroy(targetItem.gameObject);
+            Debug.Log("✅ 보급품 견인 및 획득 완료!");
         }
 
-        if (lineRenderer != null) lineRenderer.enabled = false;
+        IsLineActive = false;
         isFarming = false;
     }
 
-    IEnumerator HitObstacle(Transform obstacle, Vector3 hitPoint)
+    private IEnumerator HitSwitchOrObstacleCoroutine(Transform targetTransform, Vector3 hitPoint, bool isSwitch)
     {
         isFarming = true;
-        Vector3 myBody = transform.position + Vector3.up * 1.0f;
+        IsLineActive = true;
+        LineStart = GetOriginPos();
+        LineEnd = hitPoint;
 
-        if (lineRenderer != null)
+        if (isSwitch)
         {
-            lineRenderer.enabled = true;
-            lineRenderer.startWidth = 0.05f;
-            lineRenderer.endWidth = 0.05f;
-            lineRenderer.SetPosition(0, myBody);
-            lineRenderer.SetPosition(1, hitPoint);
+            // 선로 변환기(TrackSwitch) 스크립트 연동 (컴포넌트가 없어도 SendMessage로 유연하게 호출)
+            targetTransform.SendMessageUpwards("OnSwitchHit", SendMessageOptions.DontRequireReceiver);
+            targetTransform.SendMessageUpwards("Rpc_ToggleSwitch", SendMessageOptions.DontRequireReceiver);
+        }
+        else
+        {
+            // 장애물(TreadmillObstacle) Rpc_TakeDamage 호출 통일
+            TreadmillObstacle obstacle = targetTransform.GetComponentInParent<TreadmillObstacle>();
+            if (obstacle != null)
+            {
+                obstacle.Rpc_TakeDamage();
+            }
+            else
+            {
+                Destroy(targetTransform.gameObject);
+            }
         }
 
         yield return new WaitForSeconds(0.15f);
 
-        if (obstacle != null)
-        {
-            Destroy(obstacle.gameObject);
-            Debug.Log("장애물 파괴 완료!");
-        }
-        if (lineRenderer != null) lineRenderer.enabled = false;
+        IsLineActive = false;
         isFarming = false;
     }
 
-    IEnumerator DrawLineShort(Vector3 start, Vector3 end)
+    private IEnumerator DrawLineShortCoroutine(Vector3 start, Vector3 end)
     {
         isFarming = true;
-        if (lineRenderer != null)
-        {
-            lineRenderer.enabled = true;
-            lineRenderer.startWidth = 0.05f;
-            lineRenderer.endWidth = 0.05f;
-            lineRenderer.SetPosition(0, start);
-            lineRenderer.SetPosition(1, end);
-        }
+        IsLineActive = true;
+        LineStart = start;
+        LineEnd = end;
+
         yield return new WaitForSeconds(0.1f);
-        if (lineRenderer != null) lineRenderer.enabled = false;
+
+        IsLineActive = false;
         isFarming = false;
     }
 
-    // 🎯 2. 화면 중앙이 아니라 마우스 위치에 조준점(십자선)을 그려줍니다.
     private void OnGUI()
     {
-        if (!hasHarpoon) return;
+        if (!HasStateAuthority) return;
 
-        // 마우스의 현재 위치를 GUI 좌표로 가져옵니다 (유니티 GUI는 Y축이 반대이므로 변환)
-        float mouseX = Input.mousePosition.x;
-        float mouseY = Screen.height - Input.mousePosition.y;
+        RaycastWeapon weapon = GetComponent<RaycastWeapon>();
+        if (weapon != null && weapon.hasWeapon) return;
 
-        float size = 16f;      // 조준선 크기 살짝 키움
-        float thickness = 2f;  // 두께
+        float x = Screen.width / 2f;
+        float y = Screen.height / 2f;
+        float size = 14f;
+        float thickness = 2f;
 
-        // 마우스 포인터를 숨기거나, 조준점과 겹쳐서 보이게 할 수 있습니다.
-        // 마우스 커서를 아예 안 보이게 하려면 게임 시작 시 Cursor.visible = false; 처리를 해주면 좋습니다.
-
-        GUI.color = Color.white;
-        // 가로선
-        GUI.DrawTexture(new Rect(mouseX - size / 2f, mouseY - thickness / 2f, size, thickness), Texture2D.whiteTexture);
-        // 세로선
-        GUI.DrawTexture(new Rect(mouseX - thickness / 2f, mouseY - size / 2f, thickness, size), Texture2D.whiteTexture);
+        GUI.color = hasHarpoon ? Color.cyan : Color.white;
+        GUI.DrawTexture(new Rect(x - size / 2f, y - thickness / 2f, size, thickness), Texture2D.whiteTexture);
+        GUI.DrawTexture(new Rect(x - thickness / 2f, y - size / 2f, thickness, size), Texture2D.whiteTexture);
     }
 }
