@@ -6,13 +6,16 @@ public class TreadmillManager : NetworkBehaviour
     public static TreadmillManager Instance { get; private set; }
 
     [Header("Treadmill Settings")]
-    [Tooltip("현재 트레드밀(기차)의 이동 속도")]
-    [Networked] public float CurrentSpeed { get; set; }
-
     public float maxSpeed = 20f;
 
-    // 추가: 네트워크 스폰 완료 여부를 확인하는 플래그
-    public bool isSpawned = false;
+    // 포톤 네트워크 동기화 속도 변수 (내부용)
+    [Networked] private float _networkedSpeed { get; set; }
+
+    // ★ 외부 스크립트(Scenery, UI 등)에서 읽을 때 에러가 나지 않도록 안전장치 적용
+    public float CurrentSpeed => (Object != null && Object.IsValid) ? _networkedSpeed : 0f;
+
+    // 기존 스크립트들과의 호환성을 위한 스폰 확인 프로퍼티
+    public bool isSpawned => (Object != null && Object.IsValid);
 
     private void Awake()
     {
@@ -20,17 +23,20 @@ public class TreadmillManager : NetworkBehaviour
         else Destroy(gameObject);
     }
 
-    // 추가: Fusion 엔진이 네트워크 상에 이 객체를 완전히 생성(Spawn)했을 때 자동 실행됨
     public override void Spawned()
     {
-        isSpawned = true;
-    }
-
-    public override void FixedUpdateNetwork()
-    {
+        // 방장(StateAuthority)이 처음 스폰되었을 때 딱 한 번 기본 속도로 출발!
         if (HasStateAuthority)
         {
-            CurrentSpeed = maxSpeed;
+            _networkedSpeed = maxSpeed;
         }
+    }
+
+    // ★ 추가됨: P1 해킹 퍼즐 성공 시 호출되어 기차 속도를 실제로 변경하는 네트워크 함수
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    public void Rpc_SetTrainSpeed(float newSpeed)
+    {
+        _networkedSpeed = Mathf.Clamp(newSpeed, 0f, 100f);
+        Debug.Log($"🚂 [TreadmillManager] 기차 속도가 {_networkedSpeed}km/h로 변경되었습니다!");
     }
 }

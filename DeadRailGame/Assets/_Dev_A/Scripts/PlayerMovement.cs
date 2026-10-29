@@ -22,6 +22,8 @@ public class PlayerMovement : NetworkBehaviour
     private Camera _mainCamera;
     private bool _isFpsMode = false;
 
+    [HideInInspector] public bool isUsingTerminal = false;
+
     private void Awake()
     {
         _controller = GetComponent<CharacterController>();
@@ -62,6 +64,16 @@ public class PlayerMovement : NetworkBehaviour
     public override void FixedUpdateNetwork()
     {
         if (HasStateAuthority == false) return;
+
+        // 터미널(UI)을 조작 중일 때는 캐릭터 회전과 이동을 잠시 멈추고 중력만 받게 합니다.
+        if (isUsingTerminal)
+        {
+            if (_controller.isGrounded) _velocityY = -2f;
+            else _velocityY += gravity * Runner.DeltaTime;
+            _controller.Move(new Vector3(0, _velocityY, 0) * Runner.DeltaTime);
+            if (anim != null) anim.SetFloat("Speed", 0f);
+            return;
+        }
 
         // 1. 마우스 회전 (화면 돌리기)
         float mouseX = Input.GetAxis("Mouse X") * mouseSensitivity;
