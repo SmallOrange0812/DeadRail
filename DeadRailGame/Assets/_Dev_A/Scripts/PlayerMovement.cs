@@ -35,6 +35,8 @@ public class PlayerMovement : NetworkBehaviour
 
     private Vector3 _initFpsCamLocalPos;
 
+    [HideInInspector] public bool isUsingTerminal = false;
+
     private void Awake()
     {
         _controller = GetComponent<CharacterController>();
@@ -115,12 +117,23 @@ public class PlayerMovement : NetworkBehaviour
     {
         if (HasStateAuthority == false) return;
 
-        // 줌인 상태일 때는 정밀 조준을 위해 마우스 감도를 살짝 낮춰줌
-        float zoomRatio = (fpsCamera != null) ? (fpsCamera.fieldOfView / normalFOV) : 1f;
-        float currentSensitivity = mouseSensitivity * Mathf.Clamp(zoomRatio, 0.35f, 1f);
 
-        float mouseX = Input.GetAxis("Mouse X") * currentSensitivity;
-        float mouseY = Input.GetAxis("Mouse Y") * currentSensitivity;
+        // 터미널(UI)을 조작 중일 때는 캐릭터 회전과 이동을 잠시 멈추고...
+        if (isUsingTerminal)
+        {
+            if (_controller.isGrounded) _velocityY = -2f;
+            else _velocityY += gravity * Runner.DeltaTime;
+            _controller.Move(new Vector3(0, _velocityY, 0) * Runner.DeltaTime);
+            if (anim != null) anim.SetFloat("Speed", 0f);
+            return;
+        }
+
+// 줌인 상태일 때는 정밀 조준을 위해 마우스 감도를 살짝 낮춰줌
+float zoomRatio = (fpsCamera != null) ? (fpsCamera.fieldOfView / normalFOV) : 1f;
+float currentSensitivity = mouseSensitivity * Mathf.Clamp(zoomRatio, 0.35f, 1f);
+
+float mouseX = Input.GetAxis("Mouse X") * currentSensitivity;
+float mouseY = Input.GetAxis("Mouse Y") * currentSensitivity;
 
         transform.Rotate(Vector3.up * mouseX);
         CameraPitch = Mathf.Clamp(CameraPitch - mouseY, -85f, 85f);
