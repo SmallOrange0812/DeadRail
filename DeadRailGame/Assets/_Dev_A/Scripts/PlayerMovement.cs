@@ -6,6 +6,9 @@ public class PlayerMovement : NetworkBehaviour
     private CharacterController _controller;
     public float moveSpeed = 5f;
 
+    // ★ 1. 사라졌던 UI 조작 상태 변수 복구!
+    [HideInInspector] public bool isUsingTerminal = false;
+
     [Header("마우스 회전 설정")]
     public float mouseSensitivity = 2f;
     [Networked] public float CameraPitch { get; set; }
@@ -60,6 +63,7 @@ public class PlayerMovement : NetworkBehaviour
                 _mainCamera.gameObject.SetActive(false);
             }
 
+            // (Cursor 상태는 TerminalUIManager가 제어하므로 여기서는 기본 잠금 처리)
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;
         }
@@ -72,6 +76,9 @@ public class PlayerMovement : NetworkBehaviour
     public override void Render()
     {
         if (HasStateAuthority == false) return;
+
+        // ★ 2. 터미널 조작 중일 때는 시점 전환(V) 및 줌(Z) 입력 무시
+        if (isUsingTerminal) return;
 
         // V키를 누르면 1인칭 <-> 3인칭 전환
         if (Input.GetKeyDown(KeyCode.V))
@@ -114,6 +121,17 @@ public class PlayerMovement : NetworkBehaviour
     public override void FixedUpdateNetwork()
     {
         if (HasStateAuthority == false) return;
+
+        // ★ 3. 터미널 조작 중일 때 마우스 회전과 이동을 멈추고 중력만 적용!
+        if (isUsingTerminal)
+        {
+            if (_controller.isGrounded) _velocityY = -2f;
+            else _velocityY += gravity * Runner.DeltaTime;
+
+            _controller.Move(new Vector3(0, _velocityY, 0) * Runner.DeltaTime);
+            if (anim != null) anim.SetFloat("Speed", 0f);
+            return;
+        }
 
         // 줌인 상태일 때는 정밀 조준을 위해 마우스 감도를 살짝 낮춰줌
         float zoomRatio = (fpsCamera != null) ? (fpsCamera.fieldOfView / normalFOV) : 1f;

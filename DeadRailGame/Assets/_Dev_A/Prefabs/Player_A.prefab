@@ -345,6 +345,8 @@ MonoBehaviour:
   - {fileID: 7218742159656500744}
   - {fileID: 2720645130045664114}
   - {fileID: 2684938627363006124}
+  - {fileID: -5494089542045059355}
+  - {fileID: -1820690199772332227}
   - {fileID: -9045009875964473713}
   ForceRemoteRenderTimeframe: 0
 --- !u!114 &7216955568586518233
@@ -456,11 +458,18 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerMovement
   moveSpeed: 5
+  isUsingTerminal: 0
   mouseSensitivity: 35.18
+  _CameraPitch: 0
+  ExternalCameraRoll: 0
+  ExternalCameraShake: {x: 0, y: 0, z: 0}
+  CameraOverrideTarget: {fileID: 0}
+  normalFOV: 60
+  minZoomFOV: 20
+  zoomSpeed: 10
   gravity: -9.81
   anim: {fileID: 131965263507423343}
   fpsCamera: {fileID: 3589672859284349179}
-  isUsingTerminal: 0
 --- !u!114 &-5494089542045059355
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -473,10 +482,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 77ff16b0fab09d14c98cf763a40b02e4, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HarpoonFarming
-  p2Camera: {fileID: 0}
   lineRenderer: {fileID: 1641954333613694940}
-  pullSpeed: 15
+  harpoonMuzzle: {fileID: 0}
+  netRadius: 1.5
+  basePullSpeed: 20
   maxDistance: 50
+  harpoonDamage: 1
   hasHarpoon: 0
 --- !u!114 &-1820690199772332227
 MonoBehaviour:
@@ -490,6 +501,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 80bd513ca6efbae4e8eb32e4fbd2ebb6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::FlashlightToggle
+  _IsLightOn:
+    RawValue: 0
 --- !u!114 &-9045009875964473713
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -503,6 +516,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RaycastWeapon
   hasWeapon: 0
+  weaponName: MountedTurret
+  weaponDamage: 10
   attackRange: 50
   hitRadius: 0.5
   targetLayer:
