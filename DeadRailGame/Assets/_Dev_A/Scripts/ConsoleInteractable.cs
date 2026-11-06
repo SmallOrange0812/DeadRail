@@ -20,7 +20,7 @@ public class ConsoleInteractable : MonoBehaviour
         {
             foreach (var player in FindObjectsByType<PlayerMovement>(FindObjectsSortMode.None))
             {
-                if (player.HasStateAuthority)
+                if (player.Object != null && player.Object.IsValid && player.IsLocalPlayer)
                 {
                     _localPlayerTransform = player.transform;
                     break;

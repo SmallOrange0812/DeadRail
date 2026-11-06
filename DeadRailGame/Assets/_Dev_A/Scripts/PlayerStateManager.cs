@@ -9,7 +9,7 @@ public class PlayerStateManager : NetworkBehaviour
     {
         if(Camera.main != null)
         {
-            if(HasStateAuthority)
+            if(TryGetComponent<PlayerMovement>(out var movement) && movement.IsLocalPlayer)
             {
                 CameraFollow camFollow = Camera.main.gameObject.GetComponent<CameraFollow>();
                 if (camFollow == null)

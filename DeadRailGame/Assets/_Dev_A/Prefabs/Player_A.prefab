@@ -459,7 +459,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PlayerMovement
   moveSpeed: 5
   isUsingTerminal: 0
-  mouseSensitivity: 35.18
+  mouseSensitivity: 20
   _CameraPitch: 0
   ExternalCameraRoll: 0
   ExternalCameraShake: {x: 0, y: 0, z: 0}
