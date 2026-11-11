@@ -32,6 +32,8 @@ public class MapNodeManager : NetworkBehaviour
     // 분기점 회전 연출 트리거용 카운터
     [Networked] public int TurnSequenceCount { get; set; }
 
+    [Networked] public NetworkBool lastTurnWasLeft { get; set; }
+
     public SectorNodeData CandidateA { get; private set; }
     public SectorNodeData CandidateB { get; private set; }
 
@@ -94,7 +96,7 @@ public class MapNodeManager : NetworkBehaviour
         if (_lastTurnSequence != TurnSequenceCount)
         {
             _lastTurnSequence = TurnSequenceCount;
-            bool isLeftTurn = (bool)IsLeftSwitchSelected;
+            bool isLeftTurn = (bool)lastTurnWasLeft;
             StopAllCoroutines();
             StartCoroutine(PlayTurnAnimationCoroutine(isLeftTurn));
         }
@@ -107,7 +109,10 @@ public class MapNodeManager : NetworkBehaviour
         PlayerMovement localPlayer = null;
         foreach (var p in FindObjectsByType<PlayerMovement>(FindObjectsSortMode.None))
         {
-            if (p.HasStateAuthority) { localPlayer = p; break; }
+            if (p.Object != null && p.Object.IsValid && p.IsLocalPlayer) 
+            { 
+                localPlayer = p; break; 
+            }
         }
 
         float duration = 2.5f; // 2.5초 동안 곡선 선로 통과 연출
@@ -195,6 +200,8 @@ public class MapNodeManager : NetworkBehaviour
             Debug.Log($"⚠️ [관성 부족 패널티!] 속도가 너무 느려({currentSpeed}km/h < {chosenNode.requiredSpeed}km/h) 다크 노드로 미끄러졌습니다!");
         }
 
+        lastTurnWasLeft = IsLeftSwitchSelected;
+
         // ★ 분기점 통과 회전 애니메이션 트리거!
         TurnSequenceCount++;
 
@@ -215,5 +222,16 @@ public class MapNodeManager : NetworkBehaviour
     public void Rpc_ForceRescanBranch()
     {
         GenerateNextBranch();
+    }
+
+    private void Update()
+    {
+        if (!Debug.isDebugBuild) return;
+        if (Object == null || !Object.IsValid) return;
+
+        if (Input.GetKeyDown(KeyCode.F8))
+        {
+            Rpc_ToggleTrackSwitch();
+        }
     }
 }
