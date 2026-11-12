@@ -1,0 +1,17 @@
+{
+  "blender": "4.4.1",
+  "routes": [
+    "LEFT",
+    "STRAIGHT",
+    "RIGHT"
+  ],
+  "switch_states_test": "passed",
+  "P2_camera_shares_pitch": true,
+  "entry_debris_meshes": 12,
+  "engine_room_aisle_collisions": [],
+  "tunnel_clear_width_m": 9.6,
+  "tunnel_crown_m": 7.8,
+  "roof_fence_height_m": 1.15,
+  "fbx_files": 20,
+  "limitations": "Static meshes and preview helpers; Unity collision, camera feed, network and cutscene behavior need integration."
+}
