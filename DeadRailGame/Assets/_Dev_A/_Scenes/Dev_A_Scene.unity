@@ -351,7 +351,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: '::'
   playerPrefab:
-    RawGuidValue: c6addb562b872b2448df092780228d7f
+    RawGuidValue: 2990fd94c02e1c24c90b9788b3767b5f
 --- !u!4 &177524368
 Transform:
   m_ObjectHideFlags: 0
@@ -984,6 +984,8 @@ MonoBehaviour:
   _IsLeftTrackCandidateA:
     RawValue: 0
   _TurnSequenceCount: 0
+  _lastTurnWasLeft:
+    RawValue: 0
 --- !u!1 &679873082
 GameObject:
   m_ObjectHideFlags: 0

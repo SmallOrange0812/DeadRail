@@ -335,7 +335,7 @@ MonoBehaviour:
   m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
-  SortKey: 1491840126
+  SortKey: 2858503107
   SendPriority: 1
   EnableInterpolation: 1
   Flags: 262402
@@ -442,7 +442,7 @@ MonoBehaviour:
   Animator: {fileID: 131965263507423343}
   ApplyTiming: 2
   SyncSettings: 79
-  StateHashes: 000000008a18fce4b9abd9d3
+  StateHashes: 000000008a18fce4b9abd9d39b4dc3f0593f0252
   TriggerHashes: 00000000
   TotalWords: 1
 --- !u!114 &2684938627363006124
@@ -458,7 +458,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerMovement
   moveSpeed: 5
-  isUsingTerminal: 0
   mouseSensitivity: 20
   _CameraPitch: 0
   ExternalCameraRoll: 0
@@ -470,6 +469,7 @@ MonoBehaviour:
   gravity: -9.81
   anim: {fileID: 131965263507423343}
   fpsCamera: {fileID: 3589672859284349179}
+  isUsingTerminal: 0
 --- !u!114 &-5494089542045059355
 MonoBehaviour:
   m_ObjectHideFlags: 0
