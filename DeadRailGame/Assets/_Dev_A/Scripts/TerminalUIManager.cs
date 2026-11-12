@@ -26,12 +26,12 @@ public class TerminalUIManager : MonoBehaviour
 
     private void Update()
     {
-        // [개발자 테스트용 단축키 유지] 1번:P1 해킹창, 2번: P4 레이더창, ESC(닫기)
-        if (Input.GetKeyDown(KeyCode.Alpha1))
+        // 1, 2번 키는 장비 교체를 위해 비워두고 T(해킹창), Y(레이더창) 키로 변경했습니다.
+        if (Input.GetKeyDown(KeyCode.T))
         {
             ToggleP1Hacking();
         }
-        else if (Input.GetKeyDown(KeyCode.Alpha2))
+        else if (Input.GetKeyDown(KeyCode.Y))
         {
             ToggleP4Radar();
         }
