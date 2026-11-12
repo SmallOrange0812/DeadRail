@@ -44,17 +44,18 @@ public class NetworkManager : MonoBehaviour
 
         var result = await _runner.StartGame(new StartGameArgs()
         {
-            GameMode = GameMode.Shared,
-            SessionName = "DeadRail_Room",
+            // Directly pressing Play in the editor should be a real local test session.
+            // The lobby path above continues to use the already-running Shared session.
+            GameMode = GameMode.Single,
             Scene = SceneRef.FromIndex(SceneManager.GetActiveScene().buildIndex),
             SceneManager = gameObject.AddComponent<NetworkSceneManagerDefault>()
         });
 
-        // 방 접속에 성공하면 1초 뒤 스폰
+        // In the editor test path, spawn the local player without requiring a Photon room.
         if (result.Ok)
         {
-            await System.Threading.Tasks.Task.Delay(1000);
-            _runner.Spawn(playerPrefab, new Vector3(0, 1.5f, 0), Quaternion.identity, _runner.LocalPlayer);
+            RegisterPlayerEvents();
+            SpawnPlayer(_runner, _runner.LocalPlayer);
         }
         else
         {
@@ -101,7 +102,7 @@ public class NetworkManager : MonoBehaviour
         {
             var playerObject = await runner.SpawnAsync(
                 playerPrefab,
-                new Vector3(0f, 1.5f, 0f),
+                GetTrainSpawnPosition(),
                 Quaternion.identity,
                 player
             );
@@ -130,6 +131,44 @@ public class NetworkManager : MonoBehaviour
         {
             _playersBeingSpawned.Remove(player);
         }
+    }
+
+    private static Vector3 GetTrainSpawnPosition()
+    {
+        GameObject train = GameObject.FindGameObjectWithTag("Train");
+        if (train == null)
+        {
+            return new Vector3(0f, 1.5f, 0f);
+        }
+
+        Collider[] trainColliders = train.GetComponentsInChildren<Collider>();
+        bool hasBounds = false;
+        Bounds bounds = default;
+        foreach (Collider trainCollider in trainColliders)
+        {
+            if (!trainCollider.enabled)
+            {
+                continue;
+            }
+
+            if (!hasBounds)
+            {
+                bounds = trainCollider.bounds;
+                hasBounds = true;
+            }
+            else
+            {
+                bounds.Encapsulate(trainCollider.bounds);
+            }
+        }
+
+        if (!hasBounds)
+        {
+            return train.transform.position + Vector3.up * 3f;
+        }
+
+        // CharacterController height is 2m: place its center just above the train deck.
+        return new Vector3(bounds.center.x, bounds.max.y + 1.1f, bounds.center.z);
     }
 
     private void DespawnPlayer(NetworkRunner runner, PlayerRef player)

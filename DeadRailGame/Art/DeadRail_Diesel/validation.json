@@ -1,0 +1,9 @@
+{
+  "blender": "4.4.1",
+  "engine_room_aisle_m": 1.55,
+  "aisle_bounds_collisions": [],
+  "side_door_width_m": 1.4,
+  "side_door_clear_height_m": 2.18,
+  "track_switch_preview_test": "LEFT -> RIGHT -> LEFT passed",
+  "note": "Geometry validation only; Unity navigation/physics are not implemented."
+}
