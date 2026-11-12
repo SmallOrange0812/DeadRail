@@ -76,7 +76,7 @@ public class TerminalUIManager : MonoBehaviour
         {
             foreach (var player in FindObjectsByType<PlayerMovement>(FindObjectsSortMode.None))
             {
-                if (player.HasStateAuthority)
+                if (player.Object != null && player.Object.IsValid && player.IsLocalPlayer)
                 {
                     _localPlayer = player;
                     break;

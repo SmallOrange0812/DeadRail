@@ -1,10 +1,25 @@
 using Fusion;
 using UnityEngine;
 
+public struct PlayerControlInput : INetworkInput
+{
+    public Vector2 Move;
+    public Vector2 Look;
+}
+
 public class PlayerMovement : NetworkBehaviour
 {
+    public bool IsLocalPlayer =>
+        Runner.GameMode == GameMode.Shared 
+        ? HasStateAuthority 
+        : HasInputAuthority;
+
     private CharacterController _controller;
+
     public float moveSpeed = 5f;
+
+    // ★ 1. 사라졌던 UI 조작 상태 변수 복구!
+    [HideInInspector] public bool isUsingTerminal = false;
 
     [Header("마우스 회전 설정")]
     public float mouseSensitivity = 2f;
@@ -35,8 +50,6 @@ public class PlayerMovement : NetworkBehaviour
 
     private Vector3 _initFpsCamLocalPos;
 
-    [HideInInspector] public bool isUsingTerminal = false;
-
     private void Awake()
     {
         _controller = GetComponent<CharacterController>();
@@ -44,7 +57,7 @@ public class PlayerMovement : NetworkBehaviour
 
     public override void Spawned()
     {
-        if (HasStateAuthority)
+        if (IsLocalPlayer)
         {
             _mainCamera = Camera.main;
 
@@ -62,6 +75,7 @@ public class PlayerMovement : NetworkBehaviour
                 _mainCamera.gameObject.SetActive(false);
             }
 
+            // (Cursor 상태는 TerminalUIManager가 제어하므로 여기서는 기본 잠금 처리)
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;
         }
@@ -73,7 +87,10 @@ public class PlayerMovement : NetworkBehaviour
 
     public override void Render()
     {
-        if (HasStateAuthority == false) return;
+        if (!IsLocalPlayer) return;
+
+        // ★ 2. 터미널 조작 중일 때는 시점 전환(V) 및 줌(Z) 입력 무시
+        if (isUsingTerminal) return;
 
         // V키를 누르면 1인칭 <-> 3인칭 전환
         if (Input.GetKeyDown(KeyCode.V))
@@ -113,36 +130,57 @@ public class PlayerMovement : NetworkBehaviour
         }
     }
 
-    public override void FixedUpdateNetwork()
+    public PlayerControlInput ReadLocalInput()
     {
-        if (HasStateAuthority == false) return;
+        if (!HasStateAuthority)
+            return default;
 
-
-        // 터미널(UI)을 조작 중일 때는 캐릭터 회전과 이동을 잠시 멈추고...
-        if (isUsingTerminal)
+        if (isUsingTerminal ||
+            (TerminalUIManager.Instance != null &&
+            TerminalUIManager.Instance.IsUiOpen))
         {
-            if (_controller.isGrounded) _velocityY = -2f;
-            else _velocityY += gravity * Runner.DeltaTime;
-            _controller.Move(new Vector3(0, _velocityY, 0) * Runner.DeltaTime);
-            if (anim != null) anim.SetFloat("Speed", 0f);
-            return;
+            return default;
         }
 
-// 줌인 상태일 때는 정밀 조준을 위해 마우스 감도를 살짝 낮춰줌
-float zoomRatio = (fpsCamera != null) ? (fpsCamera.fieldOfView / normalFOV) : 1f;
-float currentSensitivity = mouseSensitivity * Mathf.Clamp(zoomRatio, 0.35f, 1f);
+        float zoomRatio = fpsCamera != null
+            ? fpsCamera.fieldOfView / normalFOV
+            : 1f;
 
-float mouseX = Input.GetAxis("Mouse X") * currentSensitivity;
-float mouseY = Input.GetAxis("Mouse Y") * currentSensitivity;
+        float sensitivity =
+            mouseSensitivity * Mathf.Clamp(zoomRatio, 0.35f, 1f);
 
-        transform.Rotate(Vector3.up * mouseX);
-        CameraPitch = Mathf.Clamp(CameraPitch - mouseY, -85f, 85f);
+        return new PlayerControlInput
+        {
+            Move = new Vector2(
+                Input.GetAxisRaw("Horizontal"),
+                Input.GetAxisRaw("Vertical")),
+            Look = new Vector2(
+                Input.GetAxis("Mouse X"),
+                Input.GetAxis("Mouse Y")) * sensitivity
+        };
+    }
 
-        float moveX = Input.GetAxisRaw("Horizontal");
-        float moveZ = Input.GetAxisRaw("Vertical");
+    public override void FixedUpdateNetwork()
+    {
+        if (!HasStateAuthority) return;
 
-        Vector3 move = (transform.right * moveX + transform.forward * moveZ).normalized;
-        Vector3 playerVelocity = move * moveSpeed;
+        PlayerControlInput controls = default;
+
+        if (Runner.GameMode == GameMode.Shared)
+        {
+            controls = ReadLocalInput();
+        }
+        else
+        {
+            GetInput(out controls);
+        }
+
+        transform.Rotate(Vector3.up * controls.Look.x);
+        CameraPitch = Mathf.Clamp(CameraPitch - controls.Look.y, -85f, 85f);
+
+        Vector3 move = transform.right * controls.Move.x
+                     + transform.forward * controls.Move.y;
+        Vector3 velocity = move.normalized * moveSpeed;
 
         if (_controller.isGrounded)
         {
@@ -153,14 +191,12 @@ float mouseY = Input.GetAxis("Mouse Y") * currentSensitivity;
             _velocityY += gravity * Runner.DeltaTime;
         }
 
-        Vector3 finalVelocity = playerVelocity;
-        finalVelocity.y = _velocityY;
-
-        _controller.Move(finalVelocity * Runner.DeltaTime);
+        velocity.y = _velocityY;
+        _controller.Move(velocity * Runner.DeltaTime);
 
         if (anim != null)
         {
-            anim.SetFloat("Speed", new Vector2(moveX, moveZ).sqrMagnitude);
+            anim.SetFloat("Speed", controls.Move.sqrMagnitude);
         }
     }
 }

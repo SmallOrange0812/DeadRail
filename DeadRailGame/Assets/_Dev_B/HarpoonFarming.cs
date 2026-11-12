@@ -254,7 +254,12 @@ public class HarpoonFarming : NetworkBehaviour
 
     private void OnGUI()
     {
-        if (!HasStateAuthority) return;
+        if (Object == null || !Object.IsValid ||
+    !TryGetComponent<PlayerMovement>(out var movement) ||
+    !movement.IsLocalPlayer)
+        {
+            return;
+        }
 
         RaycastWeapon weapon = GetComponent<RaycastWeapon>();
         if (weapon != null && weapon.hasWeapon) return;
