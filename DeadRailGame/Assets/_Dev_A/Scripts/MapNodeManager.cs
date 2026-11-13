@@ -29,6 +29,9 @@ public class MapNodeManager : NetworkBehaviour
     [Networked] public NetworkBool IsLeftSwitchSelected { get; set; }
     [Networked] public NetworkBool IsLeftTrackCandidateA { get; set; }
 
+    public bool IsHighRiskRouteSelected =>
+        (bool)IsLeftSwitchSelected == (bool)IsLeftTrackCandidateA;
+
     // 분기점 회전 연출 트리거용 카운터
     [Networked] public int TurnSequenceCount { get; set; }
 
@@ -150,6 +153,14 @@ public class MapNodeManager : NetworkBehaviour
             localPlayer.ExternalCameraRoll = 0f;
             localPlayer.ExternalCameraShake = Vector3.zero;
         }
+    }
+
+    public void ResetTrackSwitchDirection()
+    {
+        // 네트워크 방향 값은 StateAuthority에서만 변경합니다.
+        if (!HasStateAuthority) return;
+
+        IsLeftSwitchSelected = true;
     }
 
     public void GenerateNextBranch()

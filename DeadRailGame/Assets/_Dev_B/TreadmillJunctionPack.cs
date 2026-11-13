@@ -56,9 +56,11 @@ public class TreadmillJunctionPack : NetworkBehaviour
             transform.position = pos;
 
             // 스위치 방향도 기본값(왼쪽 안전 선로)으로 초기화
-            if (trackSwitch != null)
+            MapNodeManager manager = MapNodeManager.Instance;
+
+            if (manager != null)
             {
-                trackSwitch.CurrentDirection = TrackSwitch.TrackDirection.Left_SafeZone;
+                manager.ResetTrackSwitchDirection();
             }
 
             Debug.Log("🔄 [TreadmillJunctionPack] 분기점 세트가 전방에 재배치되었습니다!");

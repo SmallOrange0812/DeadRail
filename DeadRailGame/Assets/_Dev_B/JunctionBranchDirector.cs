@@ -57,36 +57,16 @@ public class JunctionBranchDirector : NetworkBehaviour
         // 1. 기차 현재 속도 가져오기 (개발자 A의 TreadmillManager가 있다면 속도값 참조)
         float currentSpeed = GetCurrentTrainSpeed();
 
-        // 2. 선로 변환기(TrackSwitch) 상태 확인
-        TrackSwitch.TrackDirection switchDir = (targetSwitch != null)
-            ? targetSwitch.CurrentDirection
-            : TrackSwitch.TrackDirection.Right_HighRiskZone;
+        //기존 2,3번 방행 및 고위험 판정 블록을 이 부분으로 교체
+        MapNodeManager manager = MapNodeManager.Instance;
 
-        bool enterHighRiskZone = false;
-        bool isLeftTurn = true;
+        bool enterHighRiskZone =
+            manager != null && manager.IsHighRiskRouteSelected
+            && currentSpeed >= requiredHighRiskSpeed;
 
-        // 3. [핵심 기획 판정] 고위험 구역 선로가 선택되었는가? + 요구 속도(관성) 이상인가?
-        if (switchDir == TrackSwitch.TrackDirection.Right_HighRiskZone)
-        {
-            if (currentSpeed >= requiredHighRiskSpeed)
-            {
-                enterHighRiskZone = true;
-                isLeftTurn = false; // 오른쪽(고위험·고보상) 선로로 진입!
-                Debug.Log($"🔥 [분기점 돌파 성공!] 요구 속도({requiredHighRiskSpeed}km) 달성! (현재: {currentSpeed}km) -> 고위험·고보상 구역 진입!");
-            }
-            else
-            {
-                enterHighRiskZone = false;
-                isLeftTurn = true; // 속도 부족으로 관성 돌파 실패 -> 안전/저보상 선로로 강제 이탈!
-                Debug.LogWarning($"⚠️ [관성 돌파 실패!] 기차 속도 부족! (현재: {currentSpeed}km / 요구: {requiredHighRiskSpeed}km) -> 선로가 밀려 저보상 구역으로 우회합니다!");
-            }
-        }
-        else
-        {
-            enterHighRiskZone = false;
-            isLeftTurn = true;
-            Debug.Log($"🟢 [안전 분기 진입] 왼쪽 안전·저보상 구역 선로로 진입합니다. (현재 속도: {currentSpeed}km)");
-        }
+        bool isLeftTurn = targetSwitch != null
+            ? targetSwitch.CurrentDirection == TrackSwitch.TrackDirection.Left
+            : true;
 
         // 4. 모든 클라이언트(P1~P4)에게 카메라 틸트 및 터널 전환 연출 RPC 전송!
         Rpc_PlayJunctionTransition(isLeftTurn, enterHighRiskZone);
