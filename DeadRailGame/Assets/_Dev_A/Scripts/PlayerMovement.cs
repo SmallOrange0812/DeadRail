@@ -5,6 +5,7 @@ public struct PlayerControlInput : INetworkInput
 {
     public Vector2 Move;
     public Vector2 Look;
+    public bool JumpPressed;
 }
 
 public class PlayerMovement : NetworkBehaviour
@@ -17,6 +18,10 @@ public class PlayerMovement : NetworkBehaviour
     private CharacterController _controller;
 
     public float moveSpeed = 5f;
+
+    [Header("점프 설정")]
+    [Tooltip("캐릭터가 점프할 때 적용하는 위쪽 속도")]
+    public float jumpImpulse = 5.5f;
 
     // ★ 1. 사라졌던 UI 조작 상태 변수 복구!
     [HideInInspector] public bool isUsingTerminal = false;
@@ -53,6 +58,13 @@ public class PlayerMovement : NetworkBehaviour
     private void Awake()
     {
         _controller = GetComponent<CharacterController>();
+
+        // 이동은 CharacterController가 처리하므로 Animator Root Motion은 끕니다.
+        // Root Motion이 켜져 있으면 걷기 클립의 루트 흔들림이 플레이어와 카메라에 더해집니다.
+        if (anim != null)
+        {
+            anim.applyRootMotion = false;
+        }
     }
 
     public override void Spawned()
@@ -132,31 +144,20 @@ public class PlayerMovement : NetworkBehaviour
 
     public PlayerControlInput ReadLocalInput()
     {
-        if (!HasStateAuthority)
-            return default;
-
         if (isUsingTerminal ||
-            (TerminalUIManager.Instance != null &&
-            TerminalUIManager.Instance.IsUiOpen))
+            (TerminalUIManager.Instance != null && TerminalUIManager.Instance.IsUiOpen))
         {
             return default;
         }
 
-        float zoomRatio = fpsCamera != null
-            ? fpsCamera.fieldOfView / normalFOV
-            : 1f;
-
-        float sensitivity =
-            mouseSensitivity * Mathf.Clamp(zoomRatio, 0.35f, 1f);
+        float zoomRatio = fpsCamera != null ? fpsCamera.fieldOfView / normalFOV : 1f;
+        float sensitivity = mouseSensitivity * Mathf.Clamp(zoomRatio, 0.35f, 1f);
 
         return new PlayerControlInput
         {
-            Move = new Vector2(
-                Input.GetAxisRaw("Horizontal"),
-                Input.GetAxisRaw("Vertical")),
-            Look = new Vector2(
-                Input.GetAxis("Mouse X"),
-                Input.GetAxis("Mouse Y")) * sensitivity
+            Move = new Vector2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical")),
+            Look = new Vector2(Input.GetAxis("Mouse X"), Input.GetAxis("Mouse Y")) * sensitivity,
+            JumpPressed = Input.GetKeyDown(KeyCode.Space)
         };
     }
 
@@ -182,7 +183,11 @@ public class PlayerMovement : NetworkBehaviour
                      + transform.forward * controls.Move.y;
         Vector3 velocity = move.normalized * moveSpeed;
 
-        if (_controller.isGrounded)
+        if (controls.JumpPressed && _controller.isGrounded)
+        {
+            _velocityY = jumpImpulse;
+        }
+        else if (_controller.isGrounded)
         {
             _velocityY = -2f;
         }

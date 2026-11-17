@@ -3,56 +3,95 @@ using Fusion;
 
 public class TrackSwitch : NetworkBehaviour
 {
-    public enum TrackDirection { Left_SafeZone = 0, Right_HighRiskZone = 1 }
+    // 실제 방향만 표현합니다. 좌우가 안전/위험을 뜻하지는 않습니다.
+    public enum TrackDirection { Left = 0, Right = 1 }
 
-    [Header("현재 선택된 선로 방향 (네트워크 동기화)")]
-    [Networked] public TrackDirection CurrentDirection { get; set; } = TrackDirection.Left_SafeZone;
-
-    [Header("시각 연출용 레버 & 표시등 (없으면 비워둬도 됨)")]
+    [Header("표시 연출용 레버와 표시등")]
     public Transform leverPivot;
     public Light statusLight;
     public Renderer lampRenderer;
 
-    [Header("레버 회전 각도 설정")]
+    [Header("레버 회전 각도")]
     public Vector3 leftAngle = new Vector3(0f, 0f, -35f);
     public Vector3 rightAngle = new Vector3(0f, 0f, 35f);
     public float rotateSpeed = 8f;
 
-    // RaycastWeapon.cs 및 HarpoonFarming.cs의 SendMessageUpwards("OnSwitchHit")에서 자동 호출됨!
-    public void OnSwitchHit()
+    private MapNodeManager mapNodeManager;
+
+    // 방향을 따로 저장하지 않고 MapNodeManager의 네트워크 값을 읽습니다.
+    public TrackDirection CurrentDirection
     {
-        Rpc_RequestToggleSwitch();
+        get
+        {
+            MapNodeManager manager = GetMapNodeManager();
+
+            if (manager == null)
+                return TrackDirection.Left;
+
+            return (bool)manager.IsLeftSwitchSelected
+                ? TrackDirection.Left
+                : TrackDirection.Right;
+        }
     }
 
-    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
-    public void Rpc_RequestToggleSwitch()
+    public override void Spawned()
     {
-        // 방장(StateAuthority) 권한으로 선로 방향 토글
-        CurrentDirection = (CurrentDirection == TrackDirection.Left_SafeZone)
-            ? TrackDirection.Right_HighRiskZone
-            : TrackDirection.Left_SafeZone;
+        GetMapNodeManager();
+    }
 
-        Debug.Log($"🔀 [TrackSwitch] 선로 변환 완료! 현재 방향: {CurrentDirection}");
+    private MapNodeManager GetMapNodeManager()
+    {
+        if (mapNodeManager == null)
+        {
+            mapNodeManager = MapNodeManager.Instance;
+
+            if (mapNodeManager == null)
+                mapNodeManager = FindFirstObjectByType<MapNodeManager>();
+        }
+
+        return mapNodeManager;
+    }
+
+    // 무기 적중이나 상호작용 코드에서 호출할 진입점
+    public void OnSwitchHit()
+    {
+        MapNodeManager manager = GetMapNodeManager();
+
+        if (manager == null)
+        {
+            Debug.LogWarning("[TrackSwitch] MapNodeManager를 찾지 못했습니다.");
+            return;
+        }
+
+        // 실제 방향 변경은 StateAuthority에서 처리합니다.
+        manager.Rpc_ToggleTrackSwitch();
     }
 
     public override void Render()
     {
-        // 1. 레버 피벗이 연결되어 있다면 부드럽게 회전 연출
+        bool isLeft = CurrentDirection == TrackDirection.Left;
+
         if (leverPivot != null)
         {
-            Quaternion targetRot = Quaternion.Euler(
-                CurrentDirection == TrackDirection.Left_SafeZone ? leftAngle : rightAngle
+            Vector3 targetAngle = isLeft ? leftAngle : rightAngle;
+            Quaternion targetRotation = Quaternion.Euler(targetAngle);
+
+            leverPivot.localRotation = Quaternion.Slerp(
+                leverPivot.localRotation,
+                targetRotation,
+                Time.deltaTime * rotateSpeed
             );
-            leverPivot.localRotation = Quaternion.Slerp(leverPivot.localRotation, targetRot, Time.deltaTime * rotateSpeed);
         }
 
-        // 2. 방향에 따른 표시등 색상 변경 (안전 구역 = 초록색 / 고위험·고보상 구역 = 주황·빨간색)
-        Color dirColor = (CurrentDirection == TrackDirection.Left_SafeZone) ? Color.green : new Color(1f, 0.3f, 0f);
+        // 예시 색상: 초록=왼쪽, 주황=오른쪽
+        Color directionColor = isLeft
+            ? Color.green
+            : new Color(1f, 0.3f, 0f);
 
-        if (statusLight != null) statusLight.color = dirColor;
+        if (statusLight != null)
+            statusLight.color = directionColor;
+
         if (lampRenderer != null && lampRenderer.material != null)
-        {
-            lampRenderer.material.color = dirColor;
-        }
+            lampRenderer.material.color = directionColor;
     }
 }

@@ -8,33 +8,36 @@ public class EquipmentPivotController : NetworkBehaviour
 {
     public enum EquipmentMode { None = 0, P2_Searchlight = 1, P3_HarpoonMount = 2 }
 
-    [Header("현재 잡고 있는 장비 모드 (1=맨손, 2=탐조등조종, 3=작살잡기)")]
+    [Header("현재 잡고 있는 장비 모드")]
     [Networked] public EquipmentMode CurrentMode { get; set; } = EquipmentMode.None;
 
-    [Header("탐조등 모드 시점 전환 (2번 상태에서 C키 또는 우클릭으로 전환!)")]
+    [Header("탐조등 모드 시점 전환")]
     public bool isSearchlightFirstPerson = false;
 
     private PlayerMovement _playerMovement;
     private HarpoonFarming _harpoonFarming;
     private RaycastWeapon _raycastWeapon;
     private Rig _bodyRig;
-    private Image _canvasCrosshairImage;
+    private Animator _animator;
+
+    [Header("UI 조준점 (직접 연결 - 비워두면 검은 박스 안 뜸!)")]
+    public Image crosshairImage;
 
     [Header("P2 탐조등 피벗 & 손잡이 (자동 검색)")]
-    public Transform searchlightYawPivot;   // 지붕 위 _P2_Searchlight_YawPivot.002
-    public Transform searchlightPitchPivot; // 지붕 위 Searchlight_PitchPivot.002
-    public Transform searchlightControlDesk; // 실내 P2 조종석 (_P2_Searchlight_Control)
+    public Transform searchlightYawPivot;
+    public Transform searchlightPitchPivot;
+    public Transform searchlightControlDesk;
     public Light searchlightLamp;
 
     [Header("거치형 작살/무기 피벗 & 손잡이 (자동 검색)")]
-    public Transform weaponRootYaw;         // _P3_Weapon_Mount_ROOT.002
-    public Transform weaponAimPivot;        // P3_AimPivot.002
-    public Transform weaponGrip;            // Weapon_Grip.002
+    public Transform weaponRootYaw;
+    public Transform weaponAimPivot;
+    public Transform weaponGrip;
 
     [Header("내 캐릭터 IK 타겟 (자동 연결)")]
-    public Transform leftHandTarget;        // LeftHandTarget
-    public Transform rightHandTarget;       // RightHandTarget
-    public Transform lookTarget;            // LookTarget
+    public Transform leftHandTarget;
+    public Transform rightHandTarget;
+    public Transform lookTarget;
 
     [Header("거리 제한 (허공에 손 들기 방지)")]
     public float maxGrabDistance = 1.6f;
@@ -62,7 +65,6 @@ public class EquipmentPivotController : NetworkBehaviour
     public void AutoSetupRigAndBones()
     {
         Transform[] allChildren = GetComponentsInChildren<Transform>(true);
-
         Transform lArm = null, lForeArm = null, lHand = null;
         Transform rArm = null, rForeArm = null, rHand = null;
         Transform spine = null;
@@ -86,21 +88,15 @@ public class EquipmentPivotController : NetworkBehaviour
         {
             if (ik.name.Contains("Left"))
             {
-                ik.data.root = lArm;
-                ik.data.mid = lForeArm;
-                ik.data.tip = lHand;
+                ik.data.root = lArm; ik.data.mid = lForeArm; ik.data.tip = lHand;
                 ik.data.target = leftHandTarget;
-                ik.data.targetPositionWeight = 1f;
-                ik.data.targetRotationWeight = 1f;
+                ik.data.targetPositionWeight = 1f; ik.data.targetRotationWeight = 1f;
             }
             else if (ik.name.Contains("Right"))
             {
-                ik.data.root = rArm;
-                ik.data.mid = rForeArm;
-                ik.data.tip = rHand;
+                ik.data.root = rArm; ik.data.mid = rForeArm; ik.data.tip = rHand;
                 ik.data.target = rightHandTarget;
-                ik.data.targetPositionWeight = 1f;
-                ik.data.targetRotationWeight = 1f;
+                ik.data.targetPositionWeight = 1f; ik.data.targetRotationWeight = 1f;
             }
         }
 
@@ -114,24 +110,21 @@ public class EquipmentPivotController : NetworkBehaviour
             aimIK.data.aimAxis = MultiAimConstraintData.Axis.Z;
             aimIK.data.limits = new Vector2(-90f, 90f);
         }
-
-        Debug.Log("✅ [AutoSetup] 양팔 뼈대 및 상체 IK 타겟 자동 연결 완료!");
     }
 
     public override void Spawned()
     {
+        CurrentMode = EquipmentMode.None;
+        isSearchlightFirstPerson = false;
+
         _playerMovement = GetComponent<PlayerMovement>();
         _harpoonFarming = GetComponent<HarpoonFarming>();
         _raycastWeapon = GetComponent<RaycastWeapon>();
         _bodyRig = GetComponentInChildren<Rig>(true);
+        _animator = GetComponentInChildren<Animator>(true);
 
-        Canvas childCanvas = GetComponentInChildren<Canvas>(true);
-        if (childCanvas != null)
-        {
-            _canvasCrosshairImage = childCanvas.GetComponentInChildren<Image>(true);
-        }
+        // AutoSetupRigAndBones();  // ✅ 이 줄을 주석 처리(//) 하거나 삭제하세요!
 
-        AutoSetupRigAndBones();
         RigBuilder rigBuilder = GetComponent<RigBuilder>();
         if (rigBuilder != null) rigBuilder.Build();
 
@@ -142,21 +135,14 @@ public class EquipmentPivotController : NetworkBehaviour
     private void FindTrainEquipment()
     {
         Transform[] allTransforms = FindObjectsByType<Transform>(FindObjectsSortMode.None);
-
         foreach (Transform t in allTransforms)
         {
-            if (searchlightYawPivot == null && t.name.Contains("Searchlight_YawPivot"))
-                searchlightYawPivot = t;
-            else if (searchlightPitchPivot == null && t.name.Contains("Searchlight_PitchPivot"))
-                searchlightPitchPivot = t;
-            else if (searchlightControlDesk == null && t.name.Contains("_P2_Searchlight_Control"))
-                searchlightControlDesk = t;
-            else if (weaponRootYaw == null && t.name.Contains("P3_Weapon_Mount_ROOT"))
-                weaponRootYaw = t;
-            else if (weaponAimPivot == null && t.name.Contains("P3_AimPivot"))
-                weaponAimPivot = t;
-            else if (weaponGrip == null && t.name.Contains("Weapon_Grip"))
-                weaponGrip = t;
+            if (searchlightYawPivot == null && t.name.Contains("Searchlight_YawPivot")) searchlightYawPivot = t;
+            else if (searchlightPitchPivot == null && t.name.Contains("Searchlight_PitchPivot")) searchlightPitchPivot = t;
+            else if (searchlightControlDesk == null && t.name.Contains("_P2_Searchlight_Control")) searchlightControlDesk = t;
+            else if (weaponRootYaw == null && t.name.Contains("P3_Weapon_Mount_ROOT")) weaponRootYaw = t;
+            else if (weaponAimPivot == null && t.name.Contains("P3_AimPivot")) weaponAimPivot = t;
+            else if (weaponGrip == null && t.name.Contains("Weapon_Grip")) weaponGrip = t;
         }
 
         if (searchlightYawPivot != null) _initSearchlightYaw = searchlightYawPivot.localRotation;
@@ -164,6 +150,7 @@ public class EquipmentPivotController : NetworkBehaviour
         {
             _initSearchlightPitch = searchlightPitchPivot.localRotation;
             searchlightLamp = searchlightPitchPivot.GetComponentInChildren<Light>(true);
+
             if (searchlightLamp == null)
             {
                 GameObject lightObj = new GameObject("Searchlight_SpotLight");
@@ -176,11 +163,21 @@ public class EquipmentPivotController : NetworkBehaviour
                 searchlightLamp.range = 150f;
                 searchlightLamp.spotAngle = 45f;
                 searchlightLamp.intensity = 500f;
+                searchlightLamp.enabled = false;
             }
         }
 
         if (weaponRootYaw != null) _initWeaponYaw = weaponRootYaw.localRotation;
         if (weaponAimPivot != null) _initWeaponPitch = weaponAimPivot.localRotation;
+
+        if (_harpoonFarming != null)
+        {
+            GameObject firePointObj = GameObject.Find("FirePoint");
+            if (firePointObj != null)
+                _harpoonFarming.harpoonMuzzle = firePointObj.transform;
+            else
+                _harpoonFarming.harpoonMuzzle = weaponAimPivot;
+        }
 
         _initialized = true;
     }
@@ -189,7 +186,6 @@ public class EquipmentPivotController : NetworkBehaviour
     {
         if (!HasStateAuthority) return;
 
-        // 1. 탐조등 모드(2번)에서 C키/우클릭으로 '탐조등 1인칭'을 켰을 때만 지붕 위 탐조등 시점으로 이동!
         if (_playerMovement != null)
         {
             if (CurrentMode == EquipmentMode.P2_Searchlight && isSearchlightFirstPerson && searchlightPitchPivot != null)
@@ -198,7 +194,6 @@ public class EquipmentPivotController : NetworkBehaviour
                 _playerMovement.CameraOverrideTarget = null;
         }
 
-        // 2. 오직 3번(작살 잡기)일 때만 민트색 조준점 표시 및 작살 발사 활성화!
         bool isHoldingHarpoon = (CurrentMode == EquipmentMode.P3_HarpoonMount);
 
         if (_harpoonFarming != null)
@@ -213,55 +208,42 @@ public class EquipmentPivotController : NetworkBehaviour
             _raycastWeapon.enabled = false;
         }
 
-        if (_canvasCrosshairImage != null)
+        if (crosshairImage != null)
         {
-            _canvasCrosshairImage.enabled = isHoldingHarpoon;
-            if (isHoldingHarpoon)
-            {
-                _canvasCrosshairImage.color = Color.cyan;
-            }
+            crosshairImage.enabled = isHoldingHarpoon;
+            if (isHoldingHarpoon) crosshairImage.color = Color.cyan;
         }
     }
 
     private void Update()
     {
-        if (!HasStateAuthority || Keyboard.current == null) return;
+        if (!HasStateAuthority) return;
 
-        // 숫자 1번: 맨손 / 숫자 2번: 탐조등 조종 / 숫자 3번: 작살 잡기
-        if (Keyboard.current.digit1Key.wasPressedThisFrame)
+        if (Input.GetKeyDown(KeyCode.Alpha1))
         {
             CurrentMode = EquipmentMode.None;
             isSearchlightFirstPerson = false;
             ApplyModeSettings();
         }
-        else if (Keyboard.current.digit2Key.wasPressedThisFrame)
+        else if (Input.GetKeyDown(KeyCode.Alpha2))
         {
             if (CurrentMode != EquipmentMode.P2_Searchlight)
             {
                 CurrentMode = EquipmentMode.P2_Searchlight;
-                isSearchlightFirstPerson = false; // 처음 2번을 누르면 플레이어 1인칭으로 시작
+                isSearchlightFirstPerson = false;
+                ApplyModeSettings();
             }
-            else
-            {
-                // 이미 2번인 상태에서 또 2번을 누르면 플레이어 1인칭 <-> 탐조등 1인칭 전환!
-                isSearchlightFirstPerson = !isSearchlightFirstPerson;
-            }
-            ApplyModeSettings();
         }
-        else if (Keyboard.current.digit3Key.wasPressedThisFrame)
+        else if (Input.GetKeyDown(KeyCode.Alpha3))
         {
             CurrentMode = EquipmentMode.P3_HarpoonMount;
             isSearchlightFirstPerson = false;
             ApplyModeSettings();
         }
 
-        // 2번(탐조등 모드)일 때 C키 또는 마우스 우클릭을 눌러도 플레이어 1인칭 <-> 탐조등 1인칭 즉시 전환!
         if (CurrentMode == EquipmentMode.P2_Searchlight)
         {
-            bool toggleCam = Keyboard.current.cKey.wasPressedThisFrame ||
-                             (Mouse.current != null && Mouse.current.rightButton.wasPressedThisFrame);
-
-            if (toggleCam)
+            if (Input.GetKeyDown(KeyCode.C) || Input.GetMouseButtonDown(1))
             {
                 isSearchlightFirstPerson = !isSearchlightFirstPerson;
                 ApplyModeSettings();
@@ -278,7 +260,17 @@ public class EquipmentPivotController : NetworkBehaviour
         if (CurrentMode == EquipmentMode.None)
         {
             if (_bodyRig != null) _bodyRig.weight = 0f;
+            if (searchlightLamp != null) searchlightLamp.enabled = false;
+
+            if (_animator != null && _animator.layerCount > 1)
+                _animator.SetLayerWeight(1, 0f);
+
             return;
+        }
+        else
+        {
+            if (_animator != null && _animator.layerCount > 1)
+                _animator.SetLayerWeight(1, 1f);
         }
 
         float yaw = transform.eulerAngles.y;
@@ -287,7 +279,6 @@ public class EquipmentPivotController : NetworkBehaviour
         if (invertYaw) yaw = -yaw;
         if (invertPitch) pitch = -pitch;
 
-        // [숫자 2번] 탐조등 조종 모드
         if (CurrentMode == EquipmentMode.P2_Searchlight)
         {
             if (searchlightYawPivot != null)
@@ -313,9 +304,10 @@ public class EquipmentPivotController : NetworkBehaviour
                     rightHandTarget.SetPositionAndRotation(deskTop + transform.right * handSpread, transform.rotation * Quaternion.Euler(rightHandRotOffset));
             }
         }
-        // [숫자 3번] 작살 잡기 모드
         else if (CurrentMode == EquipmentMode.P3_HarpoonMount)
         {
+            if (searchlightLamp != null) searchlightLamp.enabled = false;
+
             float finalWeaponYaw = yaw + weaponYawOffset;
 
             if (weaponRootYaw != null)

@@ -31,6 +31,9 @@ public class HarpoonFarming : NetworkBehaviour
 
     public override void Spawned()
     {
+        // ✅ 게임 스폰 시 무조건 작살을 장착한 상태로 강제 초기화
+        hasHarpoon = true;
+
         if (lineRenderer == null) lineRenderer = GetComponentInChildren<LineRenderer>(true);
 
         if (lineRenderer != null)
@@ -88,10 +91,8 @@ public class HarpoonFarming : NetworkBehaviour
     private float GetEffectivePullSpeed()
     {
         float trainSpeed = 0f;
-        // TreadmillManager가 존재하고 속도 변수가 있다면 반영 (추후 팀원 코드의 변수명에 맞춰 자동 연동)
         if (TreadmillManager.Instance != null)
         {
-            // 만약 팀원의 TreadmillManager 속도 변수명이 다르다면 이 부분만 맞춰주면 됩니다.
             // trainSpeed = TreadmillManager.Instance.CurrentSpeed;
         }
         return basePullSpeed + trainSpeed;
@@ -106,16 +107,13 @@ public class HarpoonFarming : NetworkBehaviour
             return;
         }
 
-        // 1. 화면 정중앙에서 광선 생성
         Vector3 screenCenter = new Vector3(Screen.width / 2f, Screen.height / 2f, 0f);
         Ray ray = activeCam.ScreenPointToRay(screenCenter);
         Vector3 startPos = GetOriginPos();
 
-        // 2. 주행 중 파밍 개선: 얇은 RaycastAll 대신 넉넉한 반경(netRadius)의 SphereCastAll 사용!
         RaycastHit[] hits = Physics.SphereCastAll(ray, netRadius, maxDistance);
         System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
 
-        // 1순위: 범위 안에 아이템(Item)이 있으면 무조건 아이템부터 최우선으로 낚아챔!
         foreach (RaycastHit hit in hits)
         {
             if (hit.transform.root == this.transform.root) continue;
@@ -128,7 +126,6 @@ public class HarpoonFarming : NetworkBehaviour
             }
         }
 
-        // 2순위: 아이템이 없을 때는 정확한 중심선(Raycast) 기준으로 스위치/장애물/벽 타격 판정
         if (Physics.Raycast(ray, out RaycastHit directHit, maxDistance))
         {
             if (directHit.transform.root != this.transform.root)
@@ -156,7 +153,6 @@ public class HarpoonFarming : NetworkBehaviour
             }
         }
 
-        // 3순위: 허공 발사
         if (hasHarpoon)
         {
             Debug.Log("💨 [작살 빗나감] 허공 발사!");
@@ -184,6 +180,7 @@ public class HarpoonFarming : NetworkBehaviour
             Vector3 currentStart = GetOriginPos();
             float currentPullSpeed = GetEffectivePullSpeed();
 
+            // ✅ 오류 수정: * 기호 추가
             targetItem.position = Vector3.MoveTowards(targetItem.position, currentStart, currentPullSpeed * Time.deltaTime);
 
             LineStart = currentStart;
@@ -215,13 +212,11 @@ public class HarpoonFarming : NetworkBehaviour
 
         if (isSwitch)
         {
-            // 선로 변환기(TrackSwitch) 스크립트 연동 (컴포넌트가 없어도 SendMessage로 유연하게 호출)
             targetTransform.SendMessageUpwards("OnSwitchHit", SendMessageOptions.DontRequireReceiver);
             targetTransform.SendMessageUpwards("Rpc_ToggleSwitch", SendMessageOptions.DontRequireReceiver);
         }
         else
         {
-            // 장애물(TreadmillObstacle) Rpc_TakeDamage 호출 통일
             TreadmillObstacle obstacle = targetTransform.GetComponentInParent<TreadmillObstacle>();
             if (obstacle != null)
             {
@@ -254,12 +249,7 @@ public class HarpoonFarming : NetworkBehaviour
 
     private void OnGUI()
     {
-        if (Object == null || !Object.IsValid ||
-    !TryGetComponent<PlayerMovement>(out var movement) ||
-    !movement.IsLocalPlayer)
-        {
-            return;
-        }
+        if (!HasStateAuthority) return;
 
         RaycastWeapon weapon = GetComponent<RaycastWeapon>();
         if (weapon != null && weapon.hasWeapon) return;
@@ -270,6 +260,8 @@ public class HarpoonFarming : NetworkBehaviour
         float thickness = 2f;
 
         GUI.color = hasHarpoon ? Color.cyan : Color.white;
+
+        // ✅ 오류 수정: 줄바꿈으로 끊어졌던 코드 한 줄로 복구
         GUI.DrawTexture(new Rect(x - size / 2f, y - thickness / 2f, size, thickness), Texture2D.whiteTexture);
         GUI.DrawTexture(new Rect(x - thickness / 2f, y - size / 2f, thickness, size), Texture2D.whiteTexture);
     }
