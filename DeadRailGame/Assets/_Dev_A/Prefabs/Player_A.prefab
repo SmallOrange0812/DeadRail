@@ -302,7 +302,7 @@ Transform:
   m_GameObject: {fileID: 1640249130425331087}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.017, y: 0.635, z: -0.166}
+  m_LocalPosition: {x: -0.008, y: 0.69, z: 0.026}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -442,7 +442,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0.7, y: 2.4, z: 0}
-  m_LocalScale: {x: 0.6, y: 0.6, z: 0.6}
+  m_LocalScale: {x: 0.90000004, y: 0.90000004, z: 0.90000004}
   m_ConstrainProportionsScale: 1
   m_Children:
   - {fileID: 378552035552024879}
@@ -592,6 +592,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerMovement
   moveSpeed: 5
+  jumpImpulse: 5.5
+  isUsingTerminal: 0
   mouseSensitivity: 35.18
   _CameraPitch: 0
   ExternalCameraRoll: 0
@@ -603,7 +605,6 @@ MonoBehaviour:
   gravity: -9.81
   anim: {fileID: 8154380664944437523}
   fpsCamera: {fileID: 7180160582512124865}
-  isUsingTerminal: 0
 --- !u!114 &7040543316291859935
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -727,7 +728,9 @@ Animator:
   m_LinearVelocityBlending: 0
   m_StabilizeFeet: 0
   m_AnimatePhysics: 0
-  m_WarningMessage: 
+  m_WarningMessage: "\nBinding warning: Some generic clip(s) animate transforms that
+    are already bound by a Humanoid avatar. These transforms can only be changed
+    by Humanoid clips.\n\tTransform 'mixamorig:Spine2'\n\tFrom animation clip 'Aim_UpperBody'"
   m_HasTransformHierarchy: 1
   m_AllowConstantClipSamplingOptimization: 1
   m_KeepAnimatorStateOnDisable: 0

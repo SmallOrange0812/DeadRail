@@ -2,11 +2,18 @@ using UnityEngine;
 using Fusion;
 using UnityEngine.SceneManagement;
 using System.Collections.Generic;
+using System.Collections;
 
 public class NetworkManager : MonoBehaviour
 {
     private NetworkRunner _runner;
     public NetworkPrefabRef playerPrefab;
+
+    [Header("차량기지 플레이어 스폰")]
+    [SerializeField] private Transform[] yardSpawnPoints;
+
+    [Tooltip("스폰 마커는 바닥에 두고, 플레이어 캡슐 중심을 바닥에서 올리는 높이")]
+    [SerializeField] private float playerSpawnHeight = 1f;
 
     private NetworkEvents _playerEvents;
 
@@ -92,18 +99,49 @@ public class NetworkManager : MonoBehaviour
 
     private async void SpawnPlayer(NetworkRunner runner, PlayerRef player)
     {
-        if (runner.TryGetPlayerObject(player, out _) ||
-            !_playersBeingSpawned.Add(player))
+        if (runner.TryGetPlayerObject(player, out var existingPlayer))
         {
+            Debug.LogWarning(
+                $"[스폰 건너뜀] 기존 플레이어 위치: {existingPlayer.transform.position}"
+            );
+            return;
+        }
+
+        if (!_playersBeingSpawned.Add(player))
+        {
+            Debug.LogWarning($"[스폰 건너뜀] 이미 생성 중인 플레이어: {player}");
             return;
         }
 
         try
         {
+            Transform spawnPoint = GetYardSpawnPoint(runner, player);
+
+            if (spawnPoint == null)
+            {
+                Debug.LogError(
+                    "차량기지 스폰 포인트가 없습니다. NetworkManager의 Yard Spawn Points를 연결하세요."
+                );
+                return;
+            }
+
+            Vector3 spawnPosition =
+                spawnPoint.position + Vector3.up * playerSpawnHeight;
+
+            Debug.LogWarning(
+                $"[기지 스폰 요청] 플레이어={player}, " +
+                $"마커={spawnPoint.name}, 마커위치={spawnPoint.position}, " +
+                $"최종위치={spawnPosition}"
+            );
+
+            Quaternion spawnRotation = spawnPoint.rotation;
+
+
+
             var playerObject = await runner.SpawnAsync(
                 playerPrefab,
-                GetTrainSpawnPosition(),
-                Quaternion.identity,
+                spawnPosition,
+                spawnRotation,
                 player
             );
 
@@ -121,6 +159,11 @@ public class NetworkManager : MonoBehaviour
             }
 
             runner.SetPlayerObject(player, playerObject);
+            StartCoroutine(ApplySpawnPositionAfterNetworkInitialization(
+                playerObject,
+                spawnPosition,
+                spawnRotation
+            ));
             Debug.Log($"플레이어 생성 완료 — {player}, 입력 권한: {playerObject.InputAuthority}");
         }
         catch (NetworkObjectSpawnException exception)
@@ -133,42 +176,81 @@ public class NetworkManager : MonoBehaviour
         }
     }
 
-    private static Vector3 GetTrainSpawnPosition()
+    private IEnumerator ApplySpawnPositionAfterNetworkInitialization(
+        NetworkObject playerObject,
+        Vector3 spawnPosition,
+        Quaternion spawnRotation)
     {
-        GameObject train = GameObject.FindGameObjectWithTag("Train");
-        if (train == null)
+        // SpawnAsync 직후에는 Fusion의 첫 네트워크 상태 적용이 아직 끝나지
+        // 않았을 수 있으므로, 첫 FixedUpdate 이후 권한자의 Transform을 확정합니다.
+        yield return new WaitForFixedUpdate();
+
+        if (playerObject == null || !playerObject.IsValid)
         {
-            return new Vector3(0f, 1.5f, 0f);
+            yield break;
         }
 
-        Collider[] trainColliders = train.GetComponentsInChildren<Collider>();
-        bool hasBounds = false;
-        Bounds bounds = default;
-        foreach (Collider trainCollider in trainColliders)
+        if (!playerObject.HasStateAuthority)
         {
-            if (!trainCollider.enabled)
+            Debug.LogError(
+                $"[기지 스폰] 위치 확정 권한이 없습니다. " +
+                $"HasStateAuthority={playerObject.HasStateAuthority}"
+            );
+            yield break;
+        }
+
+        if (!playerObject.TryGetComponent<NetworkTransform>(
+                out var networkTransform))
+        {
+            Debug.LogError(
+                "[기지 스폰] Player_A에 NetworkTransform이 없습니다."
+            );
+            yield break;
+        }
+
+        networkTransform.Teleport(spawnPosition, spawnRotation);
+
+        // 다음 프레임에서 위치가 유지되는지 확인하는 진단 로그입니다.
+        yield return null;
+        Debug.LogWarning(
+            $"[기지 스폰 확정] 실제 위치={playerObject.transform.position}, " +
+            $"목표 위치={spawnPosition}"
+        );
+    }
+
+    private Transform GetYardSpawnPoint(NetworkRunner runner, PlayerRef player)
+    {
+        if (yardSpawnPoints == null || yardSpawnPoints.Length == 0)
+        {
+            return null;
+        }
+
+        // 현재 접속 플레이어 목록에서 내 순번을 찾습니다.
+        int playerIndex = 0;
+
+        foreach (PlayerRef activePlayer in runner.ActivePlayers)
+        {
+            if (activePlayer == player)
             {
-                continue;
+                break;
             }
 
-            if (!hasBounds)
+            playerIndex++;
+        }
+
+        // 순번부터 살펴보되, 연결되지 않은 마커는 건너뜁니다.
+        for (int offset = 0; offset < yardSpawnPoints.Length; offset++)
+        {
+            int index = (playerIndex + offset) % yardSpawnPoints.Length;
+            Transform candidate = yardSpawnPoints[index];
+
+            if (candidate != null)
             {
-                bounds = trainCollider.bounds;
-                hasBounds = true;
-            }
-            else
-            {
-                bounds.Encapsulate(trainCollider.bounds);
+                return candidate;
             }
         }
 
-        if (!hasBounds)
-        {
-            return train.transform.position + Vector3.up * 3f;
-        }
-
-        // CharacterController height is 2m: place its center just above the train deck.
-        return new Vector3(bounds.center.x, bounds.max.y + 1.1f, bounds.center.z);
+        return null;
     }
 
     private void DespawnPlayer(NetworkRunner runner, PlayerRef player)
@@ -196,12 +278,15 @@ public class NetworkManager : MonoBehaviour
         PlayerControlInput currentInput = movement.ReadLocalInput();
         _pendingInput.Move = currentInput.Move;
         _pendingInput.Look += currentInput.Look;
+        // Spacebar 입력은 다음 네트워크 입력 전송까지 보관합니다.
+        _pendingInput.JumpPressed |= currentInput.JumpPressed;
     }
 
     private void SubmitInput(NetworkRunner runner, NetworkInput input)
     {
         input.Set(_pendingInput);
         _pendingInput.Look = Vector2.zero;
+        _pendingInput.JumpPressed = false;
     }
 
     private void OnDestroy()
