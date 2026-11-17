@@ -212,8 +212,11 @@ public class HarpoonFarming : NetworkBehaviour
 
         if (isSwitch)
         {
-            targetTransform.SendMessageUpwards("OnSwitchHit", SendMessageOptions.DontRequireReceiver);
-            targetTransform.SendMessageUpwards("Rpc_ToggleSwitch", SendMessageOptions.DontRequireReceiver);
+            TrackSwitch targetSwitch = targetTransform.GetComponentInParent<TrackSwitch>();
+            if (targetSwitch != null)
+                targetSwitch.OnSwitchHit();
+            else
+                Debug.LogWarning("TrackSwitch 태그가 있는 충돌체에서 TrackSwitch 컴포넌트를 찾지 못했습니다.");
         }
         else
         {

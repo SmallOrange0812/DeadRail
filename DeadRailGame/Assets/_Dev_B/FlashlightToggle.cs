@@ -30,6 +30,18 @@ public class FlashlightToggle : NetworkBehaviour
         }
     }
 
+    public override void FixedUpdateNetwork()
+    {
+        if (!HasStateAuthority || !IsLightOn) return;
+
+        TreadmillManager resourceManager = TreadmillManager.Instance;
+        if (resourceManager != null && resourceManager.isSpawned && resourceManager.Battery <= 0f)
+        {
+            IsLightOn = false;
+            Debug.Log("🔋 배터리 부족으로 조명이 꺼졌습니다.");
+        }
+    }
+
     private void Update()
     {
         // 1. 내 캐릭터(권한이 있는 플레이어)가 아니면 키 입력을 받지 않음 (다른 사람 조명을 내가 끄면 안 되니까!)
@@ -38,6 +50,16 @@ public class FlashlightToggle : NetworkBehaviour
         // 2. 키보드 연결 확인 및 F키 입력 감지
         if (Keyboard.current != null && Keyboard.current.fKey.wasPressedThisFrame)
         {
+            TreadmillManager resourceManager = TreadmillManager.Instance;
+            if (!IsLightOn &&
+                resourceManager != null &&
+                resourceManager.isSpawned &&
+                resourceManager.Battery <= 0f)
+            {
+                Debug.LogWarning("🔋 배터리가 없어 조명을 켤 수 없습니다.");
+                return;
+            }
+
             IsLightOn = !IsLightOn;
             Debug.Log("🔦 [네트워크] 현재 조명 상태 변경: " + IsLightOn);
         }

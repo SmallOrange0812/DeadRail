@@ -47,6 +47,13 @@ public class P4RadarUI : MonoBehaviour
             sweepLine.Rotate(0f, 0f, -sweepSpeed * Time.deltaTime);
         }
 
+        // Input must be checked every frame so the debug key cannot be missed
+        // by the slower UI refresh cadence below.
+        if (Input.GetKeyDown(KeyCode.R) && MapNodeManager.Instance != null)
+        {
+            MapNodeManager.Instance.Rpc_ForceRescanBranch();
+        }
+
         // 레이더 오브젝트 검색과 브리핑 갱신은 10Hz면 충분합니다.
         // 매 프레임 전체 오브젝트 검색과 문자열 재생성을 하지 않도록 제한합니다.
         if (Time.unscaledTime < _nextUiRefreshTime) return;
@@ -58,12 +65,6 @@ public class P4RadarUI : MonoBehaviour
         // 3. 네트워크 분기 후보와 남은 거리 브리핑 갱신
         RefreshNetworkBriefingText();
         UpdateRouteNodeMarkers();
-
-        // [테스트용] R키를 누르면 방장에게 요청해 새로운 갈림길 데이터 강제 갱신
-        if (Input.GetKeyDown(KeyCode.R) && MapNodeManager.Instance != null)
-        {
-            MapNodeManager.Instance.Rpc_ForceRescanBranch();
-        }
     }
 
     private void RefreshNetworkBriefingText()
@@ -96,10 +97,16 @@ public class P4RadarUI : MonoBehaviour
         string starsA = new string('★', nodeA.dangerLevel) + new string('☆', 5 - nodeA.dangerLevel);
         string starsB = new string('★', nodeB.dangerLevel) + new string('☆', 5 - nodeB.dangerLevel);
         string switchDir = mgr.IsLeftSwitchSelected ? "<color=#00FFFF>◀ 왼쪽(LEFT) 선로</color>" : "<color=#FFA500>▶ 오른쪽(RIGHT) 선로</color>";
+        TreadmillManager trainManager = TreadmillManager.Instance;
+        string resourceStatus = trainManager != null && trainManager.isSpawned
+            ? $"연료: <color=#FFAA44>{trainManager.Fuel:F0}/{trainManager.fuelCapacity:F0}</color>  |  " +
+              $"배터리: <color=#66CCFF>{trainManager.Battery:F0}/{trainManager.batteryCapacity:F0}</color>"
+            : "연료·배터리 데이터 수신 대기 중...";
 
         briefingText.text =
             $"<b>[ P4 노선 트리 관제 ]</b>  경로: {treeProgress} (Stage {mgr.CurrentStage}/5)\n" +
             $"분기점 도달까지 남은 거리 : <color=#FFFF00><b>{mgr.RemainingDistance:F0} m</b></color>\n" +
+            $"{resourceStatus}\n" +
             $"현재 선로 스위치 방향 : {switchDir}\n" +
             "--------------------------------------------------\n" +
             $"<color=#FF6666><b>■ 후보지 A : [{nodeA.sectorName}] (고위험·고보상)</b></color>\n" +

@@ -105,8 +105,11 @@ public class RaycastWeapon : NetworkBehaviour
             if (hitCollider.CompareTag("TrackSwitch"))
             {
                 Debug.Log($"🔀 [{weaponName}] 선로 변환기(TrackSwitch) 명중! 궤도 변경 신호 전송!");
-                hitCollider.SendMessageUpwards("OnSwitchHit", SendMessageOptions.DontRequireReceiver);
-                hitCollider.SendMessageUpwards("Rpc_ToggleSwitch", SendMessageOptions.DontRequireReceiver);
+                TrackSwitch targetSwitch = hitCollider.GetComponentInParent<TrackSwitch>();
+                if (targetSwitch != null)
+                    targetSwitch.OnSwitchHit();
+                else
+                    Debug.LogWarning("TrackSwitch 태그가 있는 충돌체에서 TrackSwitch 컴포넌트를 찾지 못했습니다.");
             }
             else
             {

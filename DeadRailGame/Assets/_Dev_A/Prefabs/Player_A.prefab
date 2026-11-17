@@ -682,7 +682,7 @@ MonoBehaviour:
   weaponGrip: {fileID: 0}
   leftHandTarget: {fileID: 6227487372864594820}
   rightHandTarget: {fileID: 4350251071696877514}
-  lookTarget: {fileID: 0}
+  lookTarget: {fileID: 8388033677245845498}
   maxGrabDistance: 1.6
   yawAxis: {x: 0, y: 0, z: 1}
   pitchAxis: {x: 1, y: 0, z: 0}
