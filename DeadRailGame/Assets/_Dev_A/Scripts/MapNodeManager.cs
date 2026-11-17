@@ -39,6 +39,7 @@ public class MapNodeManager : NetworkBehaviour
 
     public SectorNodeData CandidateA { get; private set; }
     public SectorNodeData CandidateB { get; private set; }
+    public bool IsNodeDataReady => RandomSeed != 0 && _lastGeneratedSeed == RandomSeed;
 
     public event Action OnNodeUpdated;
 
@@ -65,7 +66,10 @@ public class MapNodeManager : NetworkBehaviour
         }
         else
         {
-            BuildLocalBranchData(RandomSeed);
+            if (RandomSeed != 0)
+            {
+                BuildLocalBranchData(RandomSeed);
+            }
         }
     }
 
@@ -175,23 +179,33 @@ public class MapNodeManager : NetworkBehaviour
 
     private void BuildLocalBranchData(int seed)
     {
+        if (seed == 0)
+        {
+            CandidateA = default;
+            CandidateB = default;
+            _lastGeneratedSeed = -1;
+            return;
+        }
+
         _lastGeneratedSeed = seed;
-        UnityEngine.Random.InitState(seed);
+        // Map node generation must not change Unity's shared random sequence.
+        // Every peer gets the same candidates from the replicated seed.
+        var nodeRandom = new System.Random(seed);
 
         CandidateA = new SectorNodeData
         {
-            sectorName = PoolNamesHigh[UnityEngine.Random.Range(0, PoolNamesHigh.Length)],
-            dangerLevel = UnityEngine.Random.Range(4, 6),
+            sectorName = PoolNamesHigh[nodeRandom.Next(0, PoolNamesHigh.Length)],
+            dangerLevel = nodeRandom.Next(4, 6),
             rewardDesc = "대형 배터리팩 & 고순도 연료 다량",
-            requiredSpeed = UnityEngine.Random.Range(6, 10) * 10
+            requiredSpeed = nodeRandom.Next(6, 10) * 10
         };
 
         CandidateB = new SectorNodeData
         {
-            sectorName = PoolNamesLow[UnityEngine.Random.Range(0, PoolNamesLow.Length)],
-            dangerLevel = UnityEngine.Random.Range(1, 3),
+            sectorName = PoolNamesLow[nodeRandom.Next(0, PoolNamesLow.Length)],
+            dangerLevel = nodeRandom.Next(1, 3),
             rewardDesc = "소형 수리 키트 및 보급품 소량",
-            requiredSpeed = UnityEngine.Random.Range(2, 6) * 10
+            requiredSpeed = nodeRandom.Next(2, 6) * 10
         };
     }
 

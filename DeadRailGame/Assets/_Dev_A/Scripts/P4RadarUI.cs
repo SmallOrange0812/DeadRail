@@ -16,12 +16,24 @@ public class P4RadarUI : MonoBehaviour
 
     private List<RectTransform> _blipPool = new List<RectTransform>();
     private float _radarRadius;
+    private const float UiRefreshInterval = 0.1f;
+    private float _nextUiRefreshTime;
+    private Text _candidateAMarker;
+    private Text _candidateBMarker;
 
     private void Start()
     {
         if (radarCircle != null)
         {
             _radarRadius = radarCircle.rect.width / 2f;
+            _candidateAMarker = CreateNodeMarker("Radar_Node_A", new Color(1f, 0.25f, 0.2f));
+            _candidateBMarker = CreateNodeMarker("Radar_Node_B", new Color(0.3f, 1f, 0.4f));
+        }
+
+        if (trainCenter == null)
+        {
+            GameObject trainObject = GameObject.FindGameObjectWithTag("Train");
+            if (trainObject != null) trainCenter = trainObject.transform;
         }
     }
 
@@ -35,11 +47,17 @@ public class P4RadarUI : MonoBehaviour
             sweepLine.Rotate(0f, 0f, -sweepSpeed * Time.deltaTime);
         }
 
-        // 2. 주변 장애물 및 아이템 실시간 스캔
+        // 레이더 오브젝트 검색과 브리핑 갱신은 10Hz면 충분합니다.
+        // 매 프레임 전체 오브젝트 검색과 문자열 재생성을 하지 않도록 제한합니다.
+        if (Time.unscaledTime < _nextUiRefreshTime) return;
+        _nextUiRefreshTime = Time.unscaledTime + UiRefreshInterval;
+
+        // 2. 주변 장애물 및 아이템 스캔
         UpdateRadarBlips();
 
-        // 3. MapNodeManager의 실시간 갈림길 트리 및 남은 거리 브리핑 갱신
+        // 3. 네트워크 분기 후보와 남은 거리 브리핑 갱신
         RefreshNetworkBriefingText();
+        UpdateRouteNodeMarkers();
 
         // [테스트용] R키를 누르면 방장에게 요청해 새로운 갈림길 데이터 강제 갱신
         if (Input.GetKeyDown(KeyCode.R) && MapNodeManager.Instance != null)
@@ -52,7 +70,10 @@ public class P4RadarUI : MonoBehaviour
     {
         if (briefingText == null) return;
 
-        if (MapNodeManager.Instance == null || MapNodeManager.Instance.Object == null || !MapNodeManager.Instance.Object.IsValid)
+        if (MapNodeManager.Instance == null ||
+            MapNodeManager.Instance.Object == null ||
+            !MapNodeManager.Instance.Object.IsValid ||
+            !MapNodeManager.Instance.IsNodeDataReady)
         {
             briefingText.text = "<b>[ P4 전방 선로 관제 시스템 ]</b>\n\n네트워크 노드 데이터 수신 대기 중...";
             return;
@@ -90,6 +111,96 @@ public class P4RadarUI : MonoBehaviour
             "--------------------------------------------------\n" +
             "<size=20>* P2는 탐조등으로 표지판의 [실제 방향]과 [제한 속도]를 식별하세요!\n" +
             "* P1은 요구 속도를 해킹하고, P3는 스위치 방향을 사격해 맞추세요!</size>";
+    }
+
+    private void UpdateRouteNodeMarkers()
+    {
+        MapNodeManager manager = MapNodeManager.Instance;
+        bool hasNodeData = manager != null &&
+                           manager.Object != null &&
+                           manager.Object.IsValid &&
+                           manager.IsNodeDataReady;
+
+        if (!hasNodeData || _candidateAMarker == null || _candidateBMarker == null)
+        {
+            if (_candidateAMarker != null) _candidateAMarker.gameObject.SetActive(false);
+            if (_candidateBMarker != null) _candidateBMarker.gameObject.SetActive(false);
+            return;
+        }
+
+        bool candidateAIsLeft = (bool)manager.IsLeftTrackCandidateA;
+        bool selectedIsLeft = (bool)manager.IsLeftSwitchSelected;
+        float distanceRatio = Mathf.Clamp01(
+            manager.RemainingDistance / Mathf.Max(manager.distancePerStage, 0.01f));
+
+        // 레이더 위쪽은 먼 노드, 중앙은 기차에 가까운 노드를 나타냅니다.
+        float forwardOffset = _radarRadius * 0.7f * distanceRatio;
+        float sideOffset = _radarRadius * 0.32f;
+
+        UpdateNodeMarker(
+            _candidateAMarker,
+            "A",
+            candidateAIsLeft,
+            selectedIsLeft == candidateAIsLeft,
+            sideOffset,
+            forwardOffset);
+
+        bool candidateBIsLeft = !candidateAIsLeft;
+        UpdateNodeMarker(
+            _candidateBMarker,
+            "B",
+            candidateBIsLeft,
+            selectedIsLeft == candidateBIsLeft,
+            sideOffset,
+            forwardOffset);
+    }
+
+    private void UpdateNodeMarker(
+        Text marker,
+        string nodeLabel,
+        bool isLeft,
+        bool isSelected,
+        float sideOffset,
+        float forwardOffset)
+    {
+        marker.gameObject.SetActive(true);
+        marker.text = $"{(isSelected ? "*" : "")}{nodeLabel} {(isLeft ? "L" : "R")}";
+        marker.rectTransform.anchoredPosition = new Vector2(
+            isLeft ? -sideOffset : sideOffset,
+            forwardOffset);
+    }
+
+    private Text CreateNodeMarker(string objectName, Color markerColor)
+    {
+        GameObject markerObject = new GameObject(
+            objectName,
+            typeof(RectTransform),
+            typeof(CanvasRenderer),
+            typeof(Text));
+        markerObject.transform.SetParent(radarCircle, false);
+
+        Text marker = markerObject.GetComponent<Text>();
+        marker.font = briefingText != null
+            ? briefingText.font
+            : Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        if (marker.font == null)
+            marker.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+
+        marker.fontSize = 18;
+        marker.fontStyle = FontStyle.Bold;
+        marker.alignment = TextAnchor.MiddleCenter;
+        marker.color = markerColor;
+        marker.raycastTarget = false;
+        marker.horizontalOverflow = HorizontalWrapMode.Overflow;
+        marker.verticalOverflow = VerticalWrapMode.Overflow;
+
+        RectTransform markerRect = marker.rectTransform;
+        markerRect.anchorMin = new Vector2(0.5f, 0.5f);
+        markerRect.anchorMax = new Vector2(0.5f, 0.5f);
+        markerRect.pivot = new Vector2(0.5f, 0.5f);
+        markerRect.sizeDelta = new Vector2(54f, 28f);
+
+        return marker;
     }
 
     private void UpdateRadarBlips()
