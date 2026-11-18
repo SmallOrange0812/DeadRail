@@ -28,6 +28,7 @@ public class HarpoonFarming : NetworkBehaviour
 
     private bool isFarming = false;
     private Camera[] playerCameras;
+    private PlayerMovement playerMovement;
 
     public override void Spawned()
     {
@@ -45,11 +46,14 @@ public class HarpoonFarming : NetworkBehaviour
         }
 
         playerCameras = GetComponentsInChildren<Camera>(true);
+        playerMovement = GetComponent<PlayerMovement>();
     }
 
     private void Update()
     {
-        if (!HasStateAuthority) return;
+        if (Object == null || !Object.IsValid || playerMovement == null || !playerMovement.IsLocalPlayer) return;
+        if ((TerminalUIManager.Instance != null && TerminalUIManager.Instance.IsUiOpen) ||
+            (RailRouteLoop.Instance != null && RailRouteLoop.Instance.Ready && RailRouteLoop.Instance.IsTransition)) return;
 
         if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame && !isFarming)
         {
@@ -109,7 +113,25 @@ public class HarpoonFarming : NetworkBehaviour
 
         Vector3 screenCenter = new Vector3(Screen.width / 2f, Screen.height / 2f, 0f);
         Ray ray = activeCam.ScreenPointToRay(screenCenter);
+        Rpc_FireHarpoon(ray.origin, ray.direction);
+    }
+
+    [Rpc(RpcSources.InputAuthority | RpcSources.StateAuthority, RpcTargets.StateAuthority)]
+    private void Rpc_FireHarpoon(Vector3 origin, Vector3 direction)
+    {
+        EquipmentPivotController equipment = GetComponent<EquipmentPivotController>();
+        if (isFarming || (equipment != null && equipment.CurrentMode != EquipmentPivotController.EquipmentMode.P3_HarpoonMount)) return;
+        if (!float.IsFinite(origin.x) || !float.IsFinite(origin.y) || !float.IsFinite(origin.z) ||
+            !float.IsFinite(direction.x) || !float.IsFinite(direction.y) || !float.IsFinite(direction.z)) return;
+        if (Vector3.Distance(origin, transform.position) > 6f || direction.sqrMagnitude < 0.5f) return;
+        if (RailRouteLoop.Instance != null && RailRouteLoop.Instance.Ready && RailRouteLoop.Instance.IsTransition) return;
+        Ray ray = new Ray(origin, direction.normalized);
         Vector3 startPos = GetOriginPos();
+        if (RailRouteLoop.Instance != null && RailRouteLoop.Instance.Ready)
+        {
+            RailRouteLoop.Instance.RefreshCollisionGeometry();
+            Physics.SyncTransforms();
+        }
 
         RaycastHit[] hits = Physics.SphereCastAll(ray, netRadius, maxDistance);
         System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
@@ -126,8 +148,13 @@ public class HarpoonFarming : NetworkBehaviour
             }
         }
 
-        if (Physics.Raycast(ray, out RaycastHit directHit, maxDistance))
+        RaycastHit[] directHits = Physics.RaycastAll(ray, maxDistance);
+        System.Array.Sort(directHits, (a, b) => a.distance.CompareTo(b.distance));
+        foreach (RaycastHit directHit in directHits)
         {
+            RailRouteLoop route = RailRouteLoop.Instance;
+            if (route != null && route.Ready && route.trainTransform != null &&
+                directHit.transform.IsChildOf(route.trainTransform)) continue;
             if (directHit.transform.root != this.transform.root)
             {
                 if (directHit.transform.CompareTag("TrackSwitch"))
@@ -252,7 +279,7 @@ public class HarpoonFarming : NetworkBehaviour
 
     private void OnGUI()
     {
-        if (!HasStateAuthority) return;
+        if (Object == null || !Object.IsValid || playerMovement == null || !playerMovement.IsLocalPlayer) return;
 
         RaycastWeapon weapon = GetComponent<RaycastWeapon>();
         if (weapon != null && weapon.hasWeapon) return;

@@ -2,6 +2,14 @@ using UnityEngine;
 
 public class TreadmillScenery : MonoBehaviour
 {
+    private Renderer[] trackRenderers;
+    private Vector3 initialPosition;
+
+    private void Awake()
+    {
+        trackRenderers = GetComponentsInChildren<Renderer>(true);
+        initialPosition = transform.position;
+    }
     [Header("트랙 루프 설정 (8m 선로 x 9개 = 총 72m 기준)")]
     [Tooltip("기차 뒤로 완전히 넘어갔다고 판단할 Z 위치")]
     public float despawnZ = -24f;
@@ -15,6 +23,16 @@ public class TreadmillScenery : MonoBehaviour
 
     void Update()
     {
+        RailRouteLoop route = RailRouteLoop.Instance;
+        if (route != null && route.Ready)
+        {
+            float z = despawnZ + Mathf.Repeat(initialPosition.z - despawnZ - route.TravelledDistance, Mathf.Max(0.01f, totalTrackLength));
+            transform.position = new Vector3(initialPosition.x, initialPosition.y, z);
+            bool visible = route.ShowStraightTracks;
+            foreach (Renderer trackRenderer in trackRenderers)
+                trackRenderer.enabled = visible && (route.Phase != RailTravelPhase.Cruise || trackRenderer.bounds.min.z <= route.RemainingDistance - 24f);
+            return;
+        }
         if (TreadmillManager.Instance == null || !TreadmillManager.Instance.isSpawned || TreadmillManager.Instance.CurrentSpeed <= 0f)
             return;
 

@@ -6,6 +6,7 @@ using System.Collections;
 [Serializable]
 public struct SectorNodeData
 {
+    public int mapIndex;
     public string sectorName;
     public int dangerLevel;
     public string rewardDesc;
@@ -29,8 +30,7 @@ public class MapNodeManager : NetworkBehaviour
     [Networked] public NetworkBool IsLeftSwitchSelected { get; set; }
     [Networked] public NetworkBool IsLeftTrackCandidateA { get; set; }
 
-    public bool IsHighRiskRouteSelected =>
-        (bool)IsLeftSwitchSelected == (bool)IsLeftTrackCandidateA;
+    public bool IsHighRiskRouteSelected => GetRouteNode(IsLeftSwitchSelected ? RailRoute.Left : RailRoute.Right).dangerLevel >= 4;
 
     // 분기점 회전 연출 트리거용 카운터
     [Networked] public int TurnSequenceCount { get; set; }
@@ -39,6 +39,7 @@ public class MapNodeManager : NetworkBehaviour
 
     public SectorNodeData CandidateA { get; private set; }
     public SectorNodeData CandidateB { get; private set; }
+    public SectorNodeData BlackoutCandidate { get; private set; }
     public bool IsNodeDataReady => RandomSeed != 0 && _lastGeneratedSeed == RandomSeed;
 
     public event Action OnNodeUpdated;
@@ -46,8 +47,33 @@ public class MapNodeManager : NetworkBehaviour
     private int _lastGeneratedSeed = -1;
     private int _lastTurnSequence = 0;
 
-    private static readonly string[] PoolNamesHigh = { "폐기된 군수공장", "오염된 지하터널", "붕괴된 연구단지", "블랙마켓 화물역" };
+    private static readonly string[] PoolNamesHigh = { "폐기된 군수공장", "붕괴된 연구단지" };
     private static readonly string[] PoolNamesLow = { "외곽 우회 선로", "버려진 간이역", "고철 처리장", "건조한 평야 지대" };
+    private static readonly string[] PoolNamesBlackout = { "오염된 지하터널", "블랙마켓 화물역" };
+    public const int NormalMapCount = 6;
+    public const int MapCount = 8;
+
+    public static string GetMapName(int index)
+    {
+        if (index < 0 || index >= MapCount) return "미확인 구역";
+        if (index < PoolNamesLow.Length) return PoolNamesLow[index];
+        if (index < NormalMapCount) return PoolNamesHigh[index - PoolNamesLow.Length];
+        return PoolNamesBlackout[index - NormalMapCount];
+    }
+
+    public SectorNodeData GetRouteNode(RailRoute route)
+    {
+        EnsureBranchData();
+        if (route == RailRoute.Straight) return BlackoutCandidate;
+        bool candidateA = (route == RailRoute.Left) == (bool)IsLeftTrackCandidateA;
+        return candidateA ? CandidateA : CandidateB;
+    }
+
+    public void EnsureBranchData()
+    {
+        if (Object != null && Object.IsValid && RandomSeed != 0 && _lastGeneratedSeed != RandomSeed)
+            BuildLocalBranchData(RandomSeed);
+    }
 
     private void Awake()
     {
@@ -76,6 +102,7 @@ public class MapNodeManager : NetworkBehaviour
     public override void FixedUpdateNetwork()
     {
         if (!HasStateAuthority) return;
+        if (RailRouteLoop.Instance != null && RailRouteLoop.Instance.Ready) return;
 
         if (TreadmillManager.Instance != null && TreadmillManager.Instance.isSpawned)
         {
@@ -167,11 +194,21 @@ public class MapNodeManager : NetworkBehaviour
         IsLeftSwitchSelected = true;
     }
 
+    public void BeginRouteStage(int stage)
+    {
+        if (!HasStateAuthority) return;
+        CurrentStage = stage;
+        IsLeftSwitchSelected = true;
+        GenerateNextBranch();
+    }
+
     public void GenerateNextBranch()
     {
         if (!HasStateAuthority) return;
 
-        RandomSeed = UnityEngine.Random.Range(1000, 99999);
+        int seed = UnityEngine.Random.Range(1000, 99999);
+        if (seed == RandomSeed) seed = seed == 99998 ? 1000 : seed + 1;
+        RandomSeed = seed;
         IsLeftTrackCandidateA = (UnityEngine.Random.value > 0.5f);
         BuildLocalBranchData(RandomSeed);
         OnNodeUpdated?.Invoke();
@@ -183,6 +220,7 @@ public class MapNodeManager : NetworkBehaviour
         {
             CandidateA = default;
             CandidateB = default;
+            BlackoutCandidate = default;
             _lastGeneratedSeed = -1;
             return;
         }
@@ -192,20 +230,23 @@ public class MapNodeManager : NetworkBehaviour
         // Every peer gets the same candidates from the replicated seed.
         var nodeRandom = new System.Random(seed);
 
-        CandidateA = new SectorNodeData
-        {
-            sectorName = PoolNamesHigh[nodeRandom.Next(0, PoolNamesHigh.Length)],
-            dangerLevel = nodeRandom.Next(4, 6),
-            rewardDesc = "대형 배터리팩 & 고순도 연료 다량",
-            requiredSpeed = nodeRandom.Next(6, 10) * 10
-        };
+        int first = nodeRandom.Next(NormalMapCount);
+        int second = (first + 1 + nodeRandom.Next(NormalMapCount - 1)) % NormalMapCount;
+        CandidateA = CreateNode(first, nodeRandom);
+        CandidateB = CreateNode(second, nodeRandom);
+        BlackoutCandidate = CreateNode(NormalMapCount + nodeRandom.Next(PoolNamesBlackout.Length), nodeRandom);
+    }
 
-        CandidateB = new SectorNodeData
+    private static SectorNodeData CreateNode(int mapIndex, System.Random random)
+    {
+        bool highRisk = mapIndex >= PoolNamesLow.Length;
+        return new SectorNodeData
         {
-            sectorName = PoolNamesLow[nodeRandom.Next(0, PoolNamesLow.Length)],
-            dangerLevel = nodeRandom.Next(1, 3),
-            rewardDesc = "소형 수리 키트 및 보급품 소량",
-            requiredSpeed = nodeRandom.Next(2, 6) * 10
+            mapIndex = mapIndex,
+            sectorName = GetMapName(mapIndex),
+            dangerLevel = highRisk ? random.Next(4, 6) : random.Next(1, 4),
+            rewardDesc = "치료품 · 수리품 · 탄약 · 연료 · 배터리",
+            requiredSpeed = mapIndex >= NormalMapCount ? 0 : highRisk ? random.Next(6, 10) * 10 : random.Next(2, 6) * 10
         };
     }
 
@@ -238,6 +279,13 @@ public class MapNodeManager : NetworkBehaviour
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
     public void Rpc_ToggleTrackSwitch()
     {
+        RailRouteLoop route = RailRouteLoop.Instance;
+        if (route != null && route.Ready)
+        {
+            route.CycleRoute();
+            IsLeftSwitchSelected = route.SelectedRoute == RailRoute.Left;
+            return;
+        }
         IsLeftSwitchSelected = !(bool)IsLeftSwitchSelected;
         string dir = IsLeftSwitchSelected ? "◀ 왼쪽(LEFT) 선로" : "▶ 오른쪽(RIGHT) 선로";
         Debug.Log($"🔀 [선로 변환기 작동] 현재 기차 진행 궤도가 [{dir}]로 변경되었습니다!");

@@ -144,6 +144,8 @@ public class PlayerMovement : NetworkBehaviour
 
     public PlayerControlInput ReadLocalInput()
     {
+        if (RailRouteLoop.Instance != null && RailRouteLoop.Instance.Ready && RailRouteLoop.Instance.IsTransition)
+            return default;
         if (isUsingTerminal ||
             (TerminalUIManager.Instance != null && TerminalUIManager.Instance.IsUiOpen))
         {

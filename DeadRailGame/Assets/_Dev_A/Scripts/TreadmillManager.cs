@@ -3,6 +3,8 @@ using UnityEngine;
 
 public class TreadmillManager : NetworkBehaviour
 {
+    public enum FarmingStopPhase { Pending, Stopped, Departed, Cleared }
+
     public static TreadmillManager Instance { get; private set; }
 
     [Header("Treadmill Settings")]
@@ -18,17 +20,52 @@ public class TreadmillManager : NetworkBehaviour
     [Networked] private float _networkedSpeed { get; set; }
     [Networked] public float Fuel { get; set; }
     [Networked] public float Battery { get; set; }
+    [Networked] private float _fuelCapacity { get; set; }
+    [Networked] private float _batteryCapacity { get; set; }
+    [Networked] public int MedicalKits { get; private set; }
+    [Networked] public int RepairKits { get; private set; }
+    [Networked] public int Ammunition { get; private set; }
+    public float FuelCapacity => isSpawned ? _fuelCapacity : fuelCapacity;
+    public float BatteryCapacity => isSpawned ? _batteryCapacity : batteryCapacity;
+    [Networked] public FarmingStopPhase FarmingStop { get; private set; }
 
     // ★ 외부 스크립트(Scenery, UI 등)에서 읽을 때 에러가 나지 않도록 안전장치 적용
     public float CurrentSpeed => (Object != null && Object.IsValid) ? _networkedSpeed : 0f;
 
     // 기존 스크립트들과의 호환성을 위한 스폰 확인 프로퍼티
     public bool isSpawned => (Object != null && Object.IsValid);
+    public RailRouteLoop RouteLoop { get; private set; }
 
     private void Awake()
     {
+        RouteLoop = GetComponent<RailRouteLoop>();
         if (Instance == null) Instance = this;
         else Destroy(gameObject);
+    }
+
+    internal float BrakeForFarmingStop(float remainingDistance)
+    {
+        const float brakingDeceleration = 24f;
+        float brakingSpeed = Mathf.Sqrt(2f * brakingDeceleration * remainingDistance);
+        _networkedSpeed = Mathf.Min(_networkedSpeed, Mathf.Max(1f, brakingSpeed));
+        return _networkedSpeed;
+    }
+
+    internal void ArriveAtFarmingStop()
+    {
+        _networkedSpeed = 0f;
+        FarmingStop = FarmingStopPhase.Stopped;
+        Debug.Log("[TreadmillManager] 임시 파밍장에 정차했습니다.");
+    }
+
+    internal void ClearFarmingStop()
+    {
+        FarmingStop = FarmingStopPhase.Cleared;
+    }
+
+    internal void ResetFarmingStop()
+    {
+        FarmingStop = FarmingStopPhase.Pending;
     }
 
     public override void Spawned()
@@ -39,7 +76,43 @@ public class TreadmillManager : NetworkBehaviour
             _networkedSpeed = 0f;
             Fuel = Mathf.Max(0f, fuelCapacity);
             Battery = Mathf.Max(0f, batteryCapacity);
+            _fuelCapacity = Mathf.Max(1f, fuelCapacity);
+            _batteryCapacity = Mathf.Max(1f, batteryCapacity);
         }
+    }
+
+    internal bool CollectSupply(FarmingSupplyKind kind, float amount)
+    {
+        if (!HasStateAuthority || amount <= 0f) return false;
+        switch (kind)
+        {
+            case FarmingSupplyKind.FuelCapacity:
+                _fuelCapacity += amount;
+                break;
+            case FarmingSupplyKind.BatteryCapacity:
+                _batteryCapacity += amount;
+                break;
+            case FarmingSupplyKind.MedicalKit:
+                MedicalKits++;
+                break;
+            case FarmingSupplyKind.RepairKit:
+                RepairKits++;
+                break;
+            case FarmingSupplyKind.Ammunition:
+                Ammunition += 30;
+                break;
+            case FarmingSupplyKind.Fuel:
+                if (Fuel >= FuelCapacity) return false;
+                Fuel = Mathf.Min(FuelCapacity, Fuel + amount);
+                break;
+            case FarmingSupplyKind.Battery:
+                if (Battery >= BatteryCapacity) return false;
+                Battery = Mathf.Min(BatteryCapacity, Battery + amount);
+                break;
+            default:
+                return false;
+        }
+        return true;
     }
 
     public override void FixedUpdateNetwork()
@@ -94,6 +167,8 @@ public class TreadmillManager : NetworkBehaviour
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
     public void Rpc_SetTrainSpeed(float newSpeed)
     {
+        if (float.IsNaN(newSpeed) || float.IsInfinity(newSpeed)) return;
+        newSpeed = Mathf.Clamp(newSpeed, 0f, 100f);
         if (Fuel <= 0f && newSpeed > 0f)
         {
             _networkedSpeed = 0f;
@@ -101,7 +176,13 @@ public class TreadmillManager : NetworkBehaviour
             return;
         }
 
+        if (RouteLoop != null && RouteLoop.Ready && !RouteLoop.TrySetSpeed(newSpeed)) return;
         _networkedSpeed = Mathf.Clamp(newSpeed, 0f, 100f);
+        if (FarmingStop == FarmingStopPhase.Stopped && _networkedSpeed > 0f)
+        {
+            FarmingStop = FarmingStopPhase.Departed;
+            Debug.Log("[TreadmillManager] 임시 파밍장에서 출발했습니다.");
+        }
         Debug.Log($"🚂 [TreadmillManager] 기차 속도가 {_networkedSpeed}km/h로 변경되었습니다!");
     }
 }

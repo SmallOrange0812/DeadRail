@@ -20,6 +20,7 @@ public class P4RadarUI : MonoBehaviour
     private float _nextUiRefreshTime;
     private Text _candidateAMarker;
     private Text _candidateBMarker;
+    private Text _straightMarker;
 
     private void Start()
     {
@@ -28,6 +29,7 @@ public class P4RadarUI : MonoBehaviour
             _radarRadius = radarCircle.rect.width / 2f;
             _candidateAMarker = CreateNodeMarker("Radar_Node_A", new Color(1f, 0.25f, 0.2f));
             _candidateBMarker = CreateNodeMarker("Radar_Node_B", new Color(0.3f, 1f, 0.4f));
+            _straightMarker = CreateNodeMarker("Radar_Node_Straight", Color.cyan);
         }
 
         if (trainCenter == null)
@@ -70,6 +72,22 @@ public class P4RadarUI : MonoBehaviour
     private void RefreshNetworkBriefingText()
     {
         if (briefingText == null) return;
+        RailRouteLoop route = RailRouteLoop.Instance;
+        TreadmillManager train = TreadmillManager.Instance;
+        if (route != null && route.Ready && train != null && train.isSpawned)
+        {
+            MapNodeManager nodes = MapNodeManager.Instance;
+            SectorNodeData left = nodes.GetRouteNode(RailRoute.Left);
+            SectorNodeData right = nodes.GetRouteNode(RailRoute.Right);
+            briefingText.text = $"<b>[ P4 선로 관제 · 구간 {route.VisitNumber} ]</b>\n" +
+                $"{route.TravelStatus()}\n" +
+                $"연료 {train.Fuel:F1}/{train.FuelCapacity:F0} · 배터리 {train.Battery:F1}/{train.BatteryCapacity:F0}\n" +
+                $"치료품 {train.MedicalKits} · 수리품 {train.RepairKits} · 탄약 {train.Ammunition}\n탑승 {route.PlayersAboard}/{route.PlayerCount}\n\n" +
+                $"◀ {left.sectorName} · {left.requiredSpeed} km/h\n연료 최대 용량 +{route.capacityUpgradeAmount:F0}\n" +
+                $"▶ {right.sectorName} · {right.requiredSpeed} km/h\n배터리 최대 용량 +{route.capacityUpgradeAmount:F0}\n\n" +
+                "중앙은 평소 폐쇄 · 좌우 진입 실패 시 블랙아웃\n모든 맵에서 치료품·수리품·탄약·자원 파밍";
+            return;
+        }
 
         if (MapNodeManager.Instance == null ||
             MapNodeManager.Instance.Object == null ||
@@ -99,13 +117,19 @@ public class P4RadarUI : MonoBehaviour
         string switchDir = mgr.IsLeftSwitchSelected ? "<color=#00FFFF>◀ 왼쪽(LEFT) 선로</color>" : "<color=#FFA500>▶ 오른쪽(RIGHT) 선로</color>";
         TreadmillManager trainManager = TreadmillManager.Instance;
         string resourceStatus = trainManager != null && trainManager.isSpawned
-            ? $"연료: <color=#FFAA44>{trainManager.Fuel:F0}/{trainManager.fuelCapacity:F0}</color>  |  " +
-              $"배터리: <color=#66CCFF>{trainManager.Battery:F0}/{trainManager.batteryCapacity:F0}</color>"
+            ? $"연료: <color=#FFAA44>{trainManager.Fuel:F0}/{trainManager.FuelCapacity:F0}</color>  |  " +
+              $"배터리: <color=#66CCFF>{trainManager.Battery:F0}/{trainManager.BatteryCapacity:F0}</color>"
             : "연료·배터리 데이터 수신 대기 중...";
+        string travelStatus = $"분기점 도달까지 남은 거리 : <color=#FFFF00><b>{mgr.RemainingDistance:F0} m</b></color>";
+        if (trainManager != null && trainManager.isSpawned &&
+            trainManager.FarmingStop == TreadmillManager.FarmingStopPhase.Stopped)
+        {
+            travelStatus = "<color=#FFFF00><b>임시 파밍장 정차</b></color>  |  P1에서 재출발";
+        }
 
         briefingText.text =
             $"<b>[ P4 노선 트리 관제 ]</b>  경로: {treeProgress} (Stage {mgr.CurrentStage}/5)\n" +
-            $"분기점 도달까지 남은 거리 : <color=#FFFF00><b>{mgr.RemainingDistance:F0} m</b></color>\n" +
+            $"{travelStatus}\n" +
             $"{resourceStatus}\n" +
             $"현재 선로 스위치 방향 : {switchDir}\n" +
             "--------------------------------------------------\n" +
@@ -122,6 +146,19 @@ public class P4RadarUI : MonoBehaviour
 
     private void UpdateRouteNodeMarkers()
     {
+        RailRouteLoop route = RailRouteLoop.Instance;
+        if (route != null && route.Ready && _candidateAMarker != null && _candidateBMarker != null && _straightMarker != null)
+        {
+            RailRoute selected = route.Phase == RailTravelPhase.Cruise ? route.SelectedRoute : route.LockedRoute;
+            float y = _radarRadius * 0.7f * Mathf.Clamp01(route.RemainingDistance / route.cruisingDistance);
+            UpdateNodeMarker(_candidateAMarker, "연료↑", true, selected == RailRoute.Left, _radarRadius * 0.5f, y);
+            UpdateNodeMarker(_candidateBMarker, "배터리↑", false, selected == RailRoute.Right, _radarRadius * 0.5f, y);
+            _straightMarker.gameObject.SetActive(true);
+            _straightMarker.text = selected == RailRoute.Straight ? "*블랙아웃" : "폐쇄";
+            _straightMarker.rectTransform.anchoredPosition = new Vector2(0f, y + 28f);
+            return;
+        }
+        if (_straightMarker != null) _straightMarker.gameObject.SetActive(false);
         MapNodeManager manager = MapNodeManager.Instance;
         bool hasNodeData = manager != null &&
                            manager.Object != null &&

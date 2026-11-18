@@ -114,7 +114,7 @@ public class EquipmentPivotController : NetworkBehaviour
 
     public override void Spawned()
     {
-        CurrentMode = EquipmentMode.None;
+        if (HasStateAuthority) CurrentMode = EquipmentMode.None;
         isSearchlightFirstPerson = false;
 
         _playerMovement = GetComponent<PlayerMovement>();
@@ -184,7 +184,7 @@ public class EquipmentPivotController : NetworkBehaviour
 
     private void ApplyModeSettings()
     {
-        if (!HasStateAuthority) return;
+        if (_playerMovement == null || !_playerMovement.IsLocalPlayer) return;
 
         if (_playerMovement != null)
         {
@@ -217,11 +217,13 @@ public class EquipmentPivotController : NetworkBehaviour
 
     private void Update()
     {
-        if (!HasStateAuthority) return;
+        if (Object == null || !Object.IsValid || _playerMovement == null || !_playerMovement.IsLocalPlayer) return;
+        if ((TerminalUIManager.Instance != null && TerminalUIManager.Instance.IsUiOpen) ||
+            (RailRouteLoop.Instance != null && RailRouteLoop.Instance.Ready && RailRouteLoop.Instance.IsTransition)) return;
 
         if (Input.GetKeyDown(KeyCode.Alpha1))
         {
-            CurrentMode = EquipmentMode.None;
+            Rpc_SetEquipmentMode(EquipmentMode.None);
             isSearchlightFirstPerson = false;
             ApplyModeSettings();
         }
@@ -229,14 +231,14 @@ public class EquipmentPivotController : NetworkBehaviour
         {
             if (CurrentMode != EquipmentMode.P2_Searchlight)
             {
-                CurrentMode = EquipmentMode.P2_Searchlight;
+                Rpc_SetEquipmentMode(EquipmentMode.P2_Searchlight);
                 isSearchlightFirstPerson = false;
                 ApplyModeSettings();
             }
         }
         else if (Input.GetKeyDown(KeyCode.Alpha3))
         {
-            CurrentMode = EquipmentMode.P3_HarpoonMount;
+            Rpc_SetEquipmentMode(EquipmentMode.P3_HarpoonMount);
             isSearchlightFirstPerson = false;
             ApplyModeSettings();
         }
@@ -249,6 +251,13 @@ public class EquipmentPivotController : NetworkBehaviour
                 ApplyModeSettings();
             }
         }
+    }
+
+    [Rpc(RpcSources.InputAuthority | RpcSources.StateAuthority, RpcTargets.StateAuthority)]
+    private void Rpc_SetEquipmentMode(EquipmentMode mode)
+    {
+        if (mode < EquipmentMode.None || mode > EquipmentMode.P3_HarpoonMount) return;
+        CurrentMode = mode;
     }
 
     private void LateUpdate()
