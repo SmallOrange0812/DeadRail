@@ -646,7 +646,7 @@ MonoBehaviour:
   weaponMuzzle: {fileID: 0}
   leftHandTarget: {fileID: 6227487372864594820}
   rightHandTarget: {fileID: 4350251071696877514}
-  lookTarget: {fileID: 0}
+  lookTarget: {fileID: 8388033677245845498}
   maxGrabDistance: 1.6
   ladderInteractDistance: 1.5
   harpoonInteractDistance: 1.5
@@ -773,6 +773,92 @@ MonoBehaviour:
     m_HintWeight: 0
     m_MaintainTargetPositionOffset: 0
     m_MaintainTargetRotationOffset: 0
+--- !u!1 &6615110079777450012
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 5316403309505394377}
+  - component: {fileID: 4713500138267954146}
+  m_Layer: 0
+  m_Name: SpineAimIK
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &5316403309505394377
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6615110079777450012}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1560115443122375043}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &4713500138267954146
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6615110079777450012}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e3c430f382484144e925c097c2d33cfe, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Unity.Animation.Rigging::UnityEngine.Animations.Rigging.MultiAimConstraint
+  m_Weight: 1
+  m_Data:
+    m_ConstrainedObject: {fileID: 567084183365971627}
+    m_SourceObjects:
+      m_Length: 1
+      m_Item0:
+        transform: {fileID: 8388033677245845498}
+        weight: 1
+      m_Item1:
+        transform: {fileID: 0}
+        weight: 0
+      m_Item2:
+        transform: {fileID: 0}
+        weight: 0
+      m_Item3:
+        transform: {fileID: 0}
+        weight: 0
+      m_Item4:
+        transform: {fileID: 0}
+        weight: 0
+      m_Item5:
+        transform: {fileID: 0}
+        weight: 0
+      m_Item6:
+        transform: {fileID: 0}
+        weight: 0
+      m_Item7:
+        transform: {fileID: 0}
+        weight: 0
+    m_Offset: {x: 0, y: 0, z: 0}
+    m_MinLimit: -180
+    m_MaxLimit: 180
+    m_AimAxis: 4
+    m_UpAxis: 2
+    m_WorldUpType: 1
+    m_WorldUpObject: {fileID: 0}
+    m_WorldUpAxis: 2
+    m_MaintainOffset: 0
+    m_ConstrainedAxes:
+      x: 1
+      y: 1
+      z: 1
 --- !u!1 &7546313539176273095
 GameObject:
   m_ObjectHideFlags: 0
@@ -997,6 +1083,7 @@ Transform:
   - {fileID: 6227487372864594820}
   - {fileID: 4350251071696877514}
   - {fileID: 8388033677245845498}
+  - {fileID: 5316403309505394377}
   m_Father: {fileID: 378552035552024879}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &3399384337848861613
@@ -1141,6 +1228,11 @@ PrefabInstance:
 --- !u!4 &378552035552024879 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: 08dc32da33c21244882644f6dde03d0e, type: 3}
+  m_PrefabInstance: {fileID: 201072567881645764}
+  m_PrefabAsset: {fileID: 0}
+--- !u!4 &567084183365971627 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 366175167995203695, guid: 08dc32da33c21244882644f6dde03d0e, type: 3}
   m_PrefabInstance: {fileID: 201072567881645764}
   m_PrefabAsset: {fileID: 0}
 --- !u!4 &1981573550397636876 stripped

@@ -46,6 +46,7 @@ public class TerminalUIManager : MonoBehaviour
     public void ToggleP4Radar() => ToggleTerminal(p4RadarPanel);
     public void ToggleTerminal(GameObject targetPanel)
     {
+        if (RailRouteLoop.Instance != null && RailRouteLoop.Instance.Ready && RailRouteLoop.Instance.IsTransition) return;
         if (targetPanel == null) return;
 
         bool willOpen = !targetPanel.activeSelf;

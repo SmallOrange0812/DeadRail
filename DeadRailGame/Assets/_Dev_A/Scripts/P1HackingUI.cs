@@ -17,6 +17,7 @@ public class P1HackingUI : MonoBehaviour
     private float _timeRemaining = 0f;
     private bool _isPlaying = false;
     private Font _defaultFont;
+    private Button _reapproachButton;
 
     // --- [타입 A: 방향키 커맨드 변수] ---
     private List<KeyCode> _cmdSequence = new List<KeyCode>();
@@ -46,6 +47,7 @@ public class P1HackingUI : MonoBehaviour
     {
         if (speedSlider != null)
         {
+            speedSlider.minValue = 0f;
             speedSlider.onValueChanged.AddListener(OnSpeedSliderChanged);
             _targetSpeed = speedSlider.value;
         }
@@ -56,6 +58,7 @@ public class P1HackingUI : MonoBehaviour
         }
 
         UpdateIdleStatus();
+        CreateRouteControls();
     }
 
     private void OnEnable()
@@ -73,13 +76,20 @@ public class P1HackingUI : MonoBehaviour
     {
         if (statusText == null) return;
 
-        float currentSpd = (TreadmillManager.Instance != null) ? TreadmillManager.Instance.CurrentSpeed : 0f;
+        TreadmillManager train = TreadmillManager.Instance;
+        float currentSpd = train != null ? train.CurrentSpeed : 0f;
+        string instruction = train != null && train.isSpawned &&
+                             train.FarmingStop == TreadmillManager.FarmingStopPhase.Stopped
+            ? "임시 파밍장 정차 중 · 탑승 후 해킹을 완료하면 출발합니다."
+            : "슬라이더로 조절 후 해킹 시작 버튼을 누르세요";
+        if (RailRouteLoop.Instance != null && RailRouteLoop.Instance.Ready)
+            instruction = RailRouteLoop.Instance.TravelStatus();
         string diffStr = _targetSpeed < 40f ? "<color=#55FF55>하 (Easy)</color>" :
                          (_targetSpeed < 75f ? "<color=#FFFF55>중 (Normal)</color>" : "<color=#FF5555>상 (Hard)</color>");
 
         statusText.text = $"<b>[ P1 기관실 속도 제어 시스템 ]</b>\n" +
                           $"현재 기차 속도 : {currentSpd:F0} km/h  |  목표 설정 속도 : <color=#00FFFF>{_targetSpeed:F0} km/h</color>\n" +
-                          $"예상 해킹 난이도 : {diffStr} (슬라이더로 조절 후 해킹 시작 버튼을 누르세요)";
+                          $"예상 해킹 난이도 : {diffStr}  |  {instruction}";
     }
 
     public void StartRandomPuzzle()
@@ -103,7 +113,14 @@ public class P1HackingUI : MonoBehaviour
 
     private void Update()
     {
-        if (!gameObject.activeInHierarchy || !_isPlaying) return;
+        if (!gameObject.activeInHierarchy) return;
+        RailRouteLoop route = RailRouteLoop.Instance;
+        if (_reapproachButton != null) _reapproachButton.interactable = route != null && route.Ready && route.Phase == RailTravelPhase.MissedStop;
+        if (!_isPlaying)
+        {
+            UpdateIdleStatus();
+            return;
+        }
 
         // 제한시간 감소
         _timeRemaining -= Time.deltaTime;
@@ -117,6 +134,40 @@ public class P1HackingUI : MonoBehaviour
         if (_currentPuzzle == PuzzleType.TypeA_Command) UpdateTypeA();
         else if (_currentPuzzle == PuzzleType.TypeB_Timing) UpdateTypeB();
         else if (_currentPuzzle == PuzzleType.TypeC_Nodes) UpdateTypeC();
+    }
+
+    private void CreateRouteControls()
+    {
+        CreateRouteButton("정차 · 0 km/h", -240f, () => SetManeuverSpeed(0f));
+        CreateRouteButton("저속 · 5 km/h", 0f, () => SetManeuverSpeed(5f));
+        _reapproachButton = CreateRouteButton("정차 구간 재접근", 240f, () => RailRouteLoop.Instance?.Rpc_Reapproach());
+    }
+
+    private Button CreateRouteButton(string label, float x, UnityEngine.Events.UnityAction action)
+    {
+        RectTransform rect = CreateImage((RectTransform)transform, Vector2.zero, new Vector2(225f, 42f), new Color(0.08f, 0.22f, 0.25f));
+        rect.name = label;
+        rect.anchorMin = new Vector2(0.5f, 0f);
+        rect.anchorMax = rect.anchorMin;
+        rect.anchoredPosition = new Vector2(x, 36f);
+        Button button = rect.gameObject.AddComponent<Button>();
+        button.targetGraphic = rect.GetComponent<Image>();
+        button.onClick.AddListener(action);
+        Text text = CreateText(rect, Vector2.zero, rect.sizeDelta, 18);
+        text.text = label;
+        text.raycastTarget = false;
+        return button;
+    }
+
+    private void SetManeuverSpeed(float speed)
+    {
+        _isPlaying = false;
+        _currentPuzzle = PuzzleType.None;
+        ClearContainer();
+        if (startHackButton != null) startHackButton.interactable = true;
+        if (speedSlider != null) speedSlider.interactable = true;
+        TreadmillManager.Instance?.Rpc_SetTrainSpeed(speed);
+        UpdateIdleStatus();
     }
 
     // =========================================================================

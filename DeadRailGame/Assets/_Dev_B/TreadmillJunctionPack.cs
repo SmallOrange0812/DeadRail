@@ -15,6 +15,11 @@ public class TreadmillJunctionPack : NetworkBehaviour
     public float despawnZ = -60f;
     public float respawnZ = 180f;
 
+    [Header("임시 파밍장 (선택)")]
+    [SerializeField] private GameObject farmingStopArea;
+    [Tooltip("파밍장에 정차했을 때 이 세트의 월드 Z 위치")]
+    [SerializeField] private float farmingStopZ;
+
     [Header("내부 기믹 자동 연결")]
     public MonoBehaviour signboard;
     public TrackSwitch trackSwitch;
@@ -51,17 +56,41 @@ public class TreadmillJunctionPack : NetworkBehaviour
 
     public override void FixedUpdateNetwork()
     {
+        if (RailRouteLoop.Instance != null && RailRouteLoop.Instance.Ready) return;
         // 멀티플레이 시 방장(StateAuthority)이 위치를 이동시켜 동기화 (단독 테스트 시에도 작동)
         if (Object != null && !HasStateAuthority) return;
 
-        float currentSpeed = GetTreadmillSpeed();
-        float dt = Runner != null ? Runner.DeltaTime : Time.deltaTime;
+        TreadmillManager train = TreadmillManager.Instance;
+        float currentSpeed = train != null ? train.CurrentSpeed : fallbackSpeed;
+        if (currentSpeed <= 0f) return;
 
-        transform.position += moveDirection.normalized * (currentSpeed * dt);
+        float dt = Runner != null ? Runner.DeltaTime : Time.deltaTime;
+        Vector3 direction = moveDirection.normalized;
+        if (farmingStopArea != null && train != null && train.HasStateAuthority &&
+            train.FarmingStop == TreadmillManager.FarmingStopPhase.Pending && direction.z < 0f)
+        {
+            float distanceToStop = Mathf.Max(0f, (transform.position.z - farmingStopZ) / -direction.z);
+            currentSpeed = train.BrakeForFarmingStop(distanceToStop);
+            if (currentSpeed * dt >= distanceToStop)
+            {
+                transform.position += direction * distanceToStop;
+                train.ArriveAtFarmingStop();
+                return;
+            }
+        }
+
+        transform.position += direction * (currentSpeed * dt);
 
         // 기차 뒤로 완전히 지나갔을 때 다시 전방에서 다가오도록 리셋 (반복 테스트용)
         if (loopForTesting && transform.position.z <= despawnZ)
         {
+            if (farmingStopArea != null && train != null && train.HasStateAuthority &&
+                train.FarmingStop == TreadmillManager.FarmingStopPhase.Departed)
+            {
+                train.ClearFarmingStop();
+                farmingStopArea.SetActive(false);
+            }
+
             Vector3 pos = transform.position;
             pos.z = respawnZ;
             transform.position = pos;
@@ -78,19 +107,14 @@ public class TreadmillJunctionPack : NetworkBehaviour
         }
     }
 
-    private float GetTreadmillSpeed()
+    public override void Render()
     {
-        if (TreadmillManager.Instance != null)
+        TreadmillManager train = TreadmillManager.Instance;
+        if (farmingStopArea != null && farmingStopArea.activeSelf &&
+            train != null && train.isSpawned &&
+            train.FarmingStop == TreadmillManager.FarmingStopPhase.Cleared)
         {
-            var type = TreadmillManager.Instance.GetType();
-            var field = type.GetField("currentSpeed") ?? type.GetField("scrollSpeed") ?? type.GetField("speed");
-            if (field != null && field.FieldType == typeof(float))
-                return (float)field.GetValue(TreadmillManager.Instance);
-
-            var prop = type.GetProperty("CurrentSpeed") ?? type.GetProperty("ScrollSpeed");
-            if (prop != null && prop.PropertyType == typeof(float))
-                return (float)prop.GetValue(TreadmillManager.Instance);
+            farmingStopArea.SetActive(false);
         }
-        return fallbackSpeed;
     }
 }
