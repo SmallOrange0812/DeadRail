@@ -1728,6 +1728,30 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 0.040000018, y: 0.05500006, z: 0.18000007}
   m_Center: {x: 0.0000009536743, y: -0.0000009536743, z: 0.00000071525574}
+--- !u!1 &332890389 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 6906051870250764692, guid: 8c39e19aaf0f90745848273ffe7ed14d, type: 3}
+  m_PrefabInstance: {fileID: 1138650016}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &332890391
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 332890389}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3c6aee10f7bc43d6aa7efb70bb7f6c31, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ManualCrankGenerator
+  interactionPoint: {fileID: 529583433}
+  interactionDistance: 1.35
+  crankPivot: {fileID: 0}
+  crankHandle: {fileID: 0}
+  crankLocalAxis: {x: 0, y: 0, z: 1}
+  crankStrokeAngle: 48
+  crankAnimationSmoothTime: 0.09
 --- !u!1 &343779967 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 7139223792412843966, guid: 8c39e19aaf0f90745848273ffe7ed14d, type: 3}
@@ -2675,6 +2699,11 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 0.20344011, y: 0.056000005, z: 0.00000001335144}
   m_Center: {x: -0.10683934, y: 0.027281431, z: 0.000000006504058}
+--- !u!4 &529583433 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: -3420382971450220711, guid: 8c39e19aaf0f90745848273ffe7ed14d, type: 3}
+  m_PrefabInstance: {fileID: 1138650016}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &542715253 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 905598107856320578, guid: 8c39e19aaf0f90745848273ffe7ed14d, type: 3}
@@ -3144,6 +3173,18 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TreadmillManager
   maxSpeed: 20
+  initialPowerDuration: 90
+  backupPowerDuration: 60
+  _IsBlackout:
+    RawValue: 0
+  _TimeUntilBlackout: 0
+  _BackupPowerRemaining: 0
+  _CrankProgress: 0
+  _NextCrankClockwise:
+    RawValue: 0
+  _CrankStrokeSequence: 0
+  _LastCrankClockwise:
+    RawValue: 0
 --- !u!4 &635371719
 Transform:
   m_ObjectHideFlags: 0
@@ -5355,6 +5396,14 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: -3709264812049792789, guid: 8c39e19aaf0f90745848273ffe7ed14d, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0.95
+      objectReference: {fileID: 0}
+    - target: {fileID: -3709264812049792789, guid: 8c39e19aaf0f90745848273ffe7ed14d, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: -3.76
+      objectReference: {fileID: 0}
     - target: {fileID: 919132149155446097, guid: 8c39e19aaf0f90745848273ffe7ed14d, type: 3}
       propertyPath: m_Name
       value: DeadRail_Train
@@ -5366,6 +5415,22 @@ PrefabInstance:
     - target: {fileID: 1103185289285629348, guid: 8c39e19aaf0f90745848273ffe7ed14d, type: 3}
       propertyPath: m_LocalPosition.y
       value: -2.898
+      objectReference: {fileID: 0}
+    - target: {fileID: 2972586363496237237, guid: 8c39e19aaf0f90745848273ffe7ed14d, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -1.224
+      objectReference: {fileID: 0}
+    - target: {fileID: 2972586363496237237, guid: 8c39e19aaf0f90745848273ffe7ed14d, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: -4.856
+      objectReference: {fileID: 0}
+    - target: {fileID: 2972586363496237237, guid: 8c39e19aaf0f90745848273ffe7ed14d, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 3.932
+      objectReference: {fileID: 0}
+    - target: {fileID: 4969098829211467621, guid: 8c39e19aaf0f90745848273ffe7ed14d, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -1.77
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects:
@@ -5884,6 +5949,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 6973189595090745892, guid: 8c39e19aaf0f90745848273ffe7ed14d, type: 3}
       insertIndex: -1
       addedObject: {fileID: 985931913}
+    - targetCorrespondingSourceObject: {fileID: 6906051870250764692, guid: 8c39e19aaf0f90745848273ffe7ed14d, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 332890391}
     - targetCorrespondingSourceObject: {fileID: 7649553469973398883, guid: 8c39e19aaf0f90745848273ffe7ed14d, type: 3}
       insertIndex: -1
       addedObject: {fileID: 2044810609}

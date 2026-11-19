@@ -419,8 +419,6 @@ GameObject:
   - component: {fileID: 3916449202973097266}
   - component: {fileID: 8590276571872814486}
   - component: {fileID: 7040543316291859935}
-  - component: {fileID: 3805402714077953031}
-  - component: {fileID: 5768461324616486325}
   - component: {fileID: 6343406471567520509}
   - component: {fileID: 8980258957437312037}
   - component: {fileID: 8154380664944437523}
@@ -496,8 +494,6 @@ MonoBehaviour:
   - {fileID: 3916449202973097266}
   - {fileID: 8590276571872814486}
   - {fileID: 7040543316291859935}
-  - {fileID: 3805402714077953031}
-  - {fileID: 5768461324616486325}
   - {fileID: 6343406471567520509}
   - {fileID: 8980258957437312037}
   ForceRemoteRenderTimeframe: 0
@@ -624,40 +620,6 @@ MonoBehaviour:
   maxDistance: 50
   harpoonDamage: 1
   hasHarpoon: 1
---- !u!114 &3805402714077953031
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2153200045550794996}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 80bd513ca6efbae4e8eb32e4fbd2ebb6, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::FlashlightToggle
-  _IsLightOn:
-    RawValue: 0
---- !u!114 &5768461324616486325
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2153200045550794996}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 2bde05648bc693842a87620c5ccc51ca, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::RaycastWeapon
-  hasWeapon: 1
-  weaponName: MountedTurret
-  weaponDamage: 10
-  attackRange: 50
-  hitRadius: 0.5
-  targetLayer:
-    serializedVersion: 2
-    m_Bits: 64
 --- !u!114 &6343406471567520509
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -667,7 +629,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 2153200045550794996}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: b76c024317615664eb5c2066cf3c31be, type: 3}
+  m_Script: {fileID: 11500000, guid: fe705e169e3783049b52f5c061fe9d17, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EquipmentPivotController
   _CurrentMode: 0
@@ -679,11 +641,15 @@ MonoBehaviour:
   searchlightLamp: {fileID: 0}
   weaponRootYaw: {fileID: 0}
   weaponAimPivot: {fileID: 0}
+  weaponBarrel: {fileID: 0}
   weaponGrip: {fileID: 0}
+  weaponMuzzle: {fileID: 0}
   leftHandTarget: {fileID: 6227487372864594820}
   rightHandTarget: {fileID: 4350251071696877514}
   lookTarget: {fileID: 0}
   maxGrabDistance: 1.6
+  ladderInteractDistance: 1.5
+  harpoonInteractDistance: 1.5
   yawAxis: {x: 0, y: 0, z: 1}
   pitchAxis: {x: 1, y: 0, z: 0}
   weaponYawOffset: -90
@@ -691,8 +657,8 @@ MonoBehaviour:
   invertPitch: 0
   handSpread: 0.14
   gripPositionOffset: {x: 0, y: 0, z: 0}
-  leftHandRotOffset: {x: 90, y: 0, z: 0}
-  rightHandRotOffset: {x: 90, y: 0, z: 0}
+  leftHandRotOffset: {x: 0, y: 0, z: 0}
+  rightHandRotOffset: {x: 0, y: 0, z: 0}
 --- !u!114 &8980258957437312037
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -909,7 +875,7 @@ Light:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 7970453487471960634}
-  m_Enabled: 1
+  m_Enabled: 0
   serializedVersion: 12
   m_Type: 0
   m_Color: {r: 1, g: 1, b: 1, a: 1}

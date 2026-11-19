@@ -191,9 +191,6 @@ public class HarpoonFarming : NetworkBehaviour
 
         if (targetItem != null)
         {
-            RaycastWeapon weapon = GetComponent<RaycastWeapon>();
-            if (weapon != null) weapon.AcquireWeapon();
-
             hasHarpoon = true;
             Destroy(targetItem.gameObject);
             Debug.Log("✅ 보급품 견인 및 획득 완료!");
@@ -250,9 +247,6 @@ public class HarpoonFarming : NetworkBehaviour
     private void OnGUI()
     {
         if (!HasStateAuthority) return;
-
-        RaycastWeapon weapon = GetComponent<RaycastWeapon>();
-        if (weapon != null && weapon.hasWeapon) return;
 
         float x = Screen.width / 2f;
         float y = Screen.height / 2f;

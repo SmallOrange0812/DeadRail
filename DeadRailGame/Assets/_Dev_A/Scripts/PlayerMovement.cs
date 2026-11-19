@@ -6,6 +6,7 @@ public struct PlayerControlInput : INetworkInput
     public Vector2 Move;
     public Vector2 Look;
     public bool JumpPressed;
+    public bool InteractPressed;
 }
 
 public class PlayerMovement : NetworkBehaviour
@@ -51,9 +52,17 @@ public class PlayerMovement : NetworkBehaviour
     [Header("카메라 설정")]
     public Camera fpsCamera;
     private Camera _mainCamera;
-    private bool _isFpsMode = true;
 
     private Vector3 _initFpsCamLocalPos;
+    private bool _isClimbingLadder;
+    private bool _ladderControllerWasEnabled;
+    private Transform _ladderClimbReference;
+    private Vector3 _ladderClimbLocalPosition;
+    private Vector3 _ladderClimbInwardLocal;
+    private float _ladderBottomLocalY;
+    private float _ladderTopLocalY;
+    [SerializeField] private float ladderClimbSpeed = 2.2f;
+    public bool IsClimbingLadder => _isClimbingLadder;
 
     private void Awake()
     {
@@ -65,6 +74,106 @@ public class PlayerMovement : NetworkBehaviour
         {
             anim.applyRootMotion = false;
         }
+
+        // Players no longer carry a personal flashlight. The train searchlight
+        // is the only usable light source, so disable all prefab child lights.
+        foreach (Light playerLight in GetComponentsInChildren<Light>(true))
+        {
+            playerLight.enabled = false;
+        }
+    }
+
+    private void AdvanceLadderClimb(float verticalInput, float deltaTime)
+    {
+        if (_ladderClimbReference == null)
+        {
+            ReleaseLadder();
+            return;
+        }
+
+        // W/S control vertical movement while attached, like a conventional
+        // ladder. The route is train-local so it follows the moving train.
+        if (Mathf.Abs(verticalInput) < 0.01f)
+            return;
+
+        float nextY = _ladderClimbLocalPosition.y + verticalInput * ladderClimbSpeed * deltaTime;
+        if (nextY >= _ladderTopLocalY)
+        {
+            _ladderClimbLocalPosition.y = _ladderTopLocalY + 0.15f;
+            _ladderClimbLocalPosition += _ladderClimbInwardLocal * 0.65f;
+            transform.position = _ladderClimbReference.TransformPoint(_ladderClimbLocalPosition);
+            ReleaseLadder();
+            return;
+        }
+
+        if (nextY <= _ladderBottomLocalY)
+        {
+            // Step off at the bottom onto the inside floor, not outside the car.
+            _ladderClimbLocalPosition.y = _ladderBottomLocalY + 0.1f;
+            _ladderClimbLocalPosition += _ladderClimbInwardLocal * 0.65f;
+            transform.position = _ladderClimbReference.TransformPoint(_ladderClimbLocalPosition);
+            ReleaseLadder();
+            return;
+        }
+
+        _ladderClimbLocalPosition.y = nextY;
+        transform.position = _ladderClimbReference.TransformPoint(_ladderClimbLocalPosition);
+    }
+
+    private void ReleaseLadder()
+    {
+        _isClimbingLadder = false;
+        if (_controller != null)
+            _controller.enabled = _ladderControllerWasEnabled;
+        _ladderClimbReference = null;
+        _velocityY = -2f;
+    }
+
+    public bool BeginLadderClimb(
+        Transform movingReference,
+        Vector3 ladderCenterLocal,
+        Vector3 inwardLocal,
+        float bottomLocalY,
+        float topLocalY)
+    {
+        if (!HasStateAuthority || _isClimbingLadder || _controller == null || movingReference == null
+            || topLocalY <= bottomLocalY)
+            return false;
+
+        _ladderClimbReference = movingReference;
+        _ladderClimbInwardLocal = inwardLocal;
+        _ladderBottomLocalY = bottomLocalY;
+        _ladderTopLocalY = topLocalY;
+
+        float playerLocalY = movingReference.InverseTransformPoint(transform.position).y;
+        // inwardLocal points toward the train body. Keep the player on that
+        // side of the ladder throughout the climb instead of placing them outside.
+        _ladderClimbLocalPosition = ladderCenterLocal + inwardLocal * 0.45f;
+
+        // Attach at the end of the ladder nearest the player's current level:
+        // climb up from the bottom, or start descending from the roof at the top.
+        const float endRungOffset = 0.15f;
+        bool startingAtTop = playerLocalY > (bottomLocalY + topLocalY) * 0.5f;
+        _ladderClimbLocalPosition.y = startingAtTop
+            ? Mathf.Clamp(topLocalY - endRungOffset, bottomLocalY, topLocalY)
+            : Mathf.Clamp(bottomLocalY + endRungOffset, bottomLocalY, topLocalY);
+        transform.position = movingReference.TransformPoint(_ladderClimbLocalPosition);
+
+        _ladderControllerWasEnabled = _controller.enabled;
+        // Train mesh colliders block movement in the ladder shaft. Keep the
+        // controller disabled while attached, then restore it at an endpoint.
+        _controller.enabled = false;
+        _isClimbingLadder = true;
+        _velocityY = 0f;
+        return true;
+    }
+
+    private void OnDisable()
+    {
+        if (_controller != null && _isClimbingLadder)
+            _controller.enabled = _ladderControllerWasEnabled;
+        _ladderClimbReference = null;
+        _isClimbingLadder = false;
     }
 
     public override void Spawned()
@@ -101,16 +210,8 @@ public class PlayerMovement : NetworkBehaviour
     {
         if (!IsLocalPlayer) return;
 
-        // ★ 2. 터미널 조작 중일 때는 시점 전환(V) 및 줌(Z) 입력 무시
+        // 터미널 조작 중에는 시점 조작과 줌 입력을 무시합니다.
         if (isUsingTerminal) return;
-
-        // V키를 누르면 1인칭 <-> 3인칭 전환
-        if (Input.GetKeyDown(KeyCode.V))
-        {
-            _isFpsMode = !_isFpsMode;
-            if (fpsCamera != null) fpsCamera.gameObject.SetActive(_isFpsMode);
-            if (_mainCamera != null && _mainCamera != fpsCamera) _mainCamera.gameObject.SetActive(!_isFpsMode);
-        }
 
         // 🔭 마우스 휠 스크롤 또는 Z키로 멀리 있는 표지판 확대(Zoom-In) 기능!
         float scroll = Input.GetAxis("Mouse ScrollWheel");
@@ -157,7 +258,8 @@ public class PlayerMovement : NetworkBehaviour
         {
             Move = new Vector2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical")),
             Look = new Vector2(Input.GetAxis("Mouse X"), Input.GetAxis("Mouse Y")) * sensitivity,
-            JumpPressed = Input.GetKeyDown(KeyCode.Space)
+            JumpPressed = Input.GetKeyDown(KeyCode.Space),
+            InteractPressed = Input.GetKeyDown(KeyCode.E)
         };
     }
 
@@ -174,6 +276,40 @@ public class PlayerMovement : NetworkBehaviour
         else
         {
             GetInput(out controls);
+        }
+
+        if (_isClimbingLadder)
+        {
+            if (controls.InteractPressed)
+            {
+                // E releases the ladder from the player's current rung.
+                _ladderClimbLocalPosition += _ladderClimbInwardLocal * 0.65f;
+                if (_ladderClimbReference != null)
+                    transform.position = _ladderClimbReference.TransformPoint(_ladderClimbLocalPosition);
+                ReleaseLadder();
+            }
+            else
+            {
+                AdvanceLadderClimb(controls.Move.y, Runner.DeltaTime);
+            }
+
+            if (anim != null) anim.SetFloat("Speed", 0f);
+            return;
+        }
+
+        if (controls.InteractPressed)
+        {
+            EquipmentPivotController equipment = GetComponent<EquipmentPivotController>();
+            // The harpoon gets E only at roof height and inside its own range;
+            // below that, E is reserved for the ladder.
+            if (equipment != null && equipment.TryInteractWithHarpoonMount())
+                return;
+
+            if (equipment != null && equipment.TryBeginLadderClimb())
+                return;
+
+            if (equipment != null && equipment.TryInteractWithEquipment())
+                return;
         }
 
         transform.Rotate(Vector3.up * controls.Look.x);

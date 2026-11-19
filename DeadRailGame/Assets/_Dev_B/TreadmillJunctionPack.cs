@@ -16,7 +16,7 @@ public class TreadmillJunctionPack : NetworkBehaviour
     public float respawnZ = 180f;
 
     [Header("내부 기믹 자동 연결")]
-    public SearchlightSignboard signboard;
+    public MonoBehaviour signboard;
     public TrackSwitch trackSwitch;
     public JunctionBranchDirector junctionDirector;
 
@@ -28,7 +28,18 @@ public class TreadmillJunctionPack : NetworkBehaviour
     [ContextMenu("🔗 자식 기믹(표지판/스위치/디렉터) 자동 연결")]
     public void AutoLinkChildren()
     {
-        if (signboard == null) signboard = GetComponentInChildren<SearchlightSignboard>(true);
+        if (signboard == null)
+        {
+            MonoBehaviour[] behaviours = GetComponentsInChildren<MonoBehaviour>(true);
+            foreach (MonoBehaviour behaviour in behaviours)
+            {
+                if (behaviour != null && behaviour.GetType().Name == "SearchlightSignboard")
+                {
+                    signboard = behaviour;
+                    break;
+                }
+            }
+        }
         if (trackSwitch == null) trackSwitch = GetComponentInChildren<TrackSwitch>(true);
         if (junctionDirector == null) junctionDirector = GetComponentInChildren<JunctionBranchDirector>(true);
 
