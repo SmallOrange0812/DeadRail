@@ -77,13 +77,23 @@ public class NetworkManager : MonoBehaviour
         if (result.Ok)
         {
             RegisterPlayerEvents();
-            SpawnPlayer(_runner, _runner.LocalPlayer);
+            StartCoroutine(EnsureLocalPlayerSpawnedAfterTick(_runner));
         }
         else
         {
             Debug.LogError("방 접속 실패: " + result.ShutdownReason);
             Destroy(runnerObject);
         }
+    }
+
+    private IEnumerator EnsureLocalPlayerSpawnedAfterTick(NetworkRunner runner)
+    {
+        // Fusion dispatches PlayerJoined before the first simulation tick completes.
+        // Only backfill after that tick so the local player is registered first.
+        var startupTick = runner.Tick;
+        yield return new WaitUntil(() => runner == null || !runner.IsRunning || runner.Tick != startupTick);
+        if (runner != null && runner.IsRunning && !runner.TryGetPlayerObject(runner.LocalPlayer, out _))
+            SpawnPlayer(runner, runner.LocalPlayer);
     }
 
     private void RegisterPlayerEvents()
