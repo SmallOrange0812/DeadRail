@@ -34,7 +34,7 @@ public class NetworkManager : MonoBehaviour
             _runner.ProvideInput = true;
             RegisterPlayerEvents();
 
-            if (_runner.IsServer)
+            if (_runner.IsServer || _runner.GameMode == GameMode.Single)
             {
                 foreach (PlayerRef player in _runner.ActivePlayers)
                 {
@@ -46,28 +46,54 @@ public class NetworkManager : MonoBehaviour
         }
 
         // [상황 B] 로비를 거치지 않고 게임 씬에서 바로 Play를 누른 경우 (테스트용)
-        _runner = gameObject.AddComponent<NetworkRunner>();
+        // Fusion reloads the requested scene during StartGame. Do not host the
+        // runner on this scene's NetworkManager GameObject: that object would
+        // survive with the runner while a second NetworkManager is created by
+        // the reloaded scene, causing duplicate player spawn/scene registration.
+        var runnerObject = new GameObject("LocalNetworkRunner");
+        DontDestroyOnLoad(runnerObject);
+        _runner = runnerObject.AddComponent<NetworkRunner>();
         _runner.ProvideInput = true;
 
+        var localSceneManager = runnerObject.AddComponent<NetworkSceneManagerDefault>();
         var result = await _runner.StartGame(new StartGameArgs()
         {
             // Directly pressing Play in the editor should be a real local test session.
             // The lobby path above continues to use the already-running Shared session.
             GameMode = GameMode.Single,
             Scene = SceneRef.FromIndex(SceneManager.GetActiveScene().buildIndex),
-            SceneManager = gameObject.AddComponent<NetworkSceneManagerDefault>()
+            SceneManager = localSceneManager
         });
+
+        // StartGame can reload this scene, destroying this NetworkManager and
+        // creating a replacement. Only the replacement should register input
+        // callbacks and spawn players after that reload.
+        if (this == null)
+        {
+            return;
+        }
 
         // In the editor test path, spawn the local player without requiring a Photon room.
         if (result.Ok)
         {
             RegisterPlayerEvents();
-            SpawnPlayer(_runner, _runner.LocalPlayer);
+            StartCoroutine(EnsureLocalPlayerSpawnedAfterTick(_runner));
         }
         else
         {
             Debug.LogError("방 접속 실패: " + result.ShutdownReason);
+            Destroy(runnerObject);
         }
+    }
+
+    private IEnumerator EnsureLocalPlayerSpawnedAfterTick(NetworkRunner runner)
+    {
+        // Fusion dispatches PlayerJoined before the first simulation tick completes.
+        // Only backfill after that tick so the local player is registered first.
+        var startupTick = runner.Tick;
+        yield return new WaitUntil(() => runner == null || !runner.IsRunning || runner.Tick != startupTick);
+        if (runner != null && runner.IsRunning && !runner.TryGetPlayerObject(runner.LocalPlayer, out _))
+            SpawnPlayer(runner, runner.LocalPlayer);
     }
 
     private void RegisterPlayerEvents()
@@ -280,6 +306,7 @@ public class NetworkManager : MonoBehaviour
         _pendingInput.Look += currentInput.Look;
         // Spacebar 입력은 다음 네트워크 입력 전송까지 보관합니다.
         _pendingInput.JumpPressed |= currentInput.JumpPressed;
+        _pendingInput.InteractPressed |= currentInput.InteractPressed;
     }
 
     private void SubmitInput(NetworkRunner runner, NetworkInput input)
@@ -287,6 +314,7 @@ public class NetworkManager : MonoBehaviour
         input.Set(_pendingInput);
         _pendingInput.Look = Vector2.zero;
         _pendingInput.JumpPressed = false;
+        _pendingInput.InteractPressed = false;
     }
 
     private void OnDestroy()

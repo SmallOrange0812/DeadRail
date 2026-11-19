@@ -29,12 +29,11 @@ public class ConsoleInteractable : MonoBehaviour
             return;
         }
 
-        //2. 콘솔과 내 캐릭터 시야의 거리 계산
-        float dist = Vector3.Distance(transform.position, _localPlayerTransform.position);
-        _isPlayerNear = (dist <= interactDistance);
+        PlayerMovement localPlayer = _localPlayerTransform.GetComponent<PlayerMovement>();
+        _isPlayerNear = localPlayer != null && IsThisNearestInteraction(localPlayer);
 
-        //3.가까이 다가갔을 때 [E]키를 누르면 해당 모니터 UI 토글!
-        if(_isPlayerNear && Input.GetKeyDown(KeyCode.E))
+        // 여러 콘솔이나 장비가 범위에 겹치면 가장 가까운 대상 하나만 E를 받습니다.
+        if (_isPlayerNear && Input.GetKeyDown(KeyCode.E))
         {
             if (TerminalUIManager.Instance != null)
             {
@@ -44,6 +43,58 @@ public class ConsoleInteractable : MonoBehaviour
                     TerminalUIManager.Instance.ToggleP4Radar();
             }
         }
+    }
+
+    public static bool IsConsoleNearestInteraction(PlayerMovement player)
+    {
+        if (player == null)
+            return false;
+
+        ConsoleInteractable nearestConsole = FindNearestConsole(player.transform, out float consoleDistance);
+        if (nearestConsole == null)
+            return false;
+
+        EquipmentPivotController equipment = player.GetComponent<EquipmentPivotController>();
+        float equipmentDistance = equipment != null
+            ? equipment.GetNearestInteractionDistance()
+            : float.PositiveInfinity;
+
+        return consoleDistance <= equipmentDistance;
+    }
+
+    private bool IsThisNearestInteraction(PlayerMovement player)
+    {
+        ConsoleInteractable nearestConsole = FindNearestConsole(player.transform, out float consoleDistance);
+        if (nearestConsole != this)
+            return false;
+
+        EquipmentPivotController equipment = player.GetComponent<EquipmentPivotController>();
+        float equipmentDistance = equipment != null
+            ? equipment.GetNearestInteractionDistance()
+            : float.PositiveInfinity;
+
+        return consoleDistance <= equipmentDistance;
+    }
+
+    private static ConsoleInteractable FindNearestConsole(Transform player, out float nearestDistance)
+    {
+        ConsoleInteractable nearest = null;
+        nearestDistance = float.PositiveInfinity;
+
+        foreach (ConsoleInteractable console in FindObjectsByType<ConsoleInteractable>(FindObjectsSortMode.None))
+        {
+            if (console == null || !console.isActiveAndEnabled)
+                continue;
+
+            float distance = Vector3.Distance(player.position, console.transform.position);
+            if (distance <= console.interactDistance && distance < nearestDistance)
+            {
+                nearest = console;
+                nearestDistance = distance;
+            }
+        }
+
+        return nearest;
     }
 
     //4.가까이 다가갔을 때 화면에 [E] 상호작용 안내 문구 자동 표시
