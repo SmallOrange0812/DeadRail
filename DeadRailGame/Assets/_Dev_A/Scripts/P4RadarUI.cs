@@ -85,7 +85,8 @@ public class P4RadarUI : MonoBehaviour
                 $"치료품 {train.MedicalKits} · 수리품 {train.RepairKits} · 탄약 {train.Ammunition}\n탑승 {route.PlayersAboard}/{route.PlayerCount}\n\n" +
                 $"◀ {left.sectorName} · {left.requiredSpeed} km/h\n연료 최대 용량 +{route.capacityUpgradeAmount:F0}\n" +
                 $"▶ {right.sectorName} · {right.requiredSpeed} km/h\n배터리 최대 용량 +{route.capacityUpgradeAmount:F0}\n\n" +
-                "중앙은 평소 폐쇄 · 좌우 진입 실패 시 블랙아웃\n모든 맵에서 치료품·수리품·탄약·자원 파밍";
+                "P3 적중으로 왼쪽 → 미선택 → 오른쪽 전환\n미선택 또는 요구 속도 불일치 시 중앙 블랙아웃\n" +
+                "모든 맵에서 치료품·수리품·탄약·자원 파밍";
             return;
         }
 
@@ -154,7 +155,9 @@ public class P4RadarUI : MonoBehaviour
             UpdateNodeMarker(_candidateAMarker, "연료↑", true, selected == RailRoute.Left, _radarRadius * 0.5f, y);
             UpdateNodeMarker(_candidateBMarker, "배터리↑", false, selected == RailRoute.Right, _radarRadius * 0.5f, y);
             _straightMarker.gameObject.SetActive(true);
-            _straightMarker.text = selected == RailRoute.Straight ? "*블랙아웃" : "폐쇄";
+            _straightMarker.text = selected == RailRoute.Straight
+                ? (route.Phase == RailTravelPhase.Cruise ? "*미선택" : "*블랙아웃")
+                : "블랙아웃";
             _straightMarker.rectTransform.anchoredPosition = new Vector2(0f, y + 28f);
             return;
         }

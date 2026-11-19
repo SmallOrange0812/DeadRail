@@ -24313,6 +24313,14 @@ MonoBehaviour:
   supplyKinds: 000000000300000004000000050000000600000007000000
   farmingMaps: {fileID: 1346566108}
   centralRoadblock: {fileID: 1854394143}
+  largeFuelCan: {fileID: 919132149155446097, guid: 50bc17d092e54e2d9d5674bb02dfb8e1, type: 3}
+  largeBattery: {fileID: 919132149155446097, guid: 072eafa052b727b4da03d906c365eae3, type: 3}
+  firstAidKit: {fileID: 919132149155446097, guid: ddffdda666524a609bba385f3fc5da73, type: 3}
+  ammoBox: {fileID: 919132149155446097, guid: 8170263bc90e4eb1a7cbdd9c6acde9de, type: 3}
+  smallFuelCan: {fileID: 919132149155446097, guid: 56e024b4dc3e4dd4aac508672570c398, type: 3}
+  smallBattery: {fileID: 919132149155446097, guid: 01d46936173c440fbeafa28f9b64d327, type: 3}
+  ammoBoxBody: {fileID: 2100000, guid: 8971842a87fe435b9236d390ff3f28fb, type: 2}
+  repairBoxBody: {fileID: 2100000, guid: 1a1d513da0aa455a8e4a895fb7435769, type: 2}
   cruisingDistance: 300
   junctionRevealDistance: 150
   approachDistance: 85
