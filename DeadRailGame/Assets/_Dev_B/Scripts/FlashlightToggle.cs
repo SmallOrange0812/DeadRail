@@ -44,6 +44,14 @@ public class FlashlightToggle : NetworkBehaviour
 
     private void Update()
     {
+        EquipmentPivotController equipment = GetComponent<EquipmentPivotController>();
+        if (equipment != null && equipment.CurrentMode == EquipmentPivotController.EquipmentMode.P2_Searchlight)
+        {
+            if (HasStateAuthority) IsLightOn = false;
+            if (spotlight != null) spotlight.enabled = false;
+            return;
+        }
+
         // 1. 내 캐릭터(권한이 있는 플레이어)가 아니면 키 입력을 받지 않음 (다른 사람 조명을 내가 끄면 안 되니까!)
         if (!HasStateAuthority) return;
 
@@ -67,6 +75,13 @@ public class FlashlightToggle : NetworkBehaviour
 
     public override void Render()
     {
+        EquipmentPivotController equipment = GetComponent<EquipmentPivotController>();
+        if (equipment != null && equipment.CurrentMode == EquipmentPivotController.EquipmentMode.P2_Searchlight)
+        {
+            if (spotlight != null) spotlight.enabled = false;
+            return;
+        }
+
         // 매 프레임 렌더링 시점에 네트워크 변수(IsLightOn) 상태와 실제 전구(spotlight.enabled) 상태를 일치시킴
         // (내 화면뿐만 아니라 다른 플레이어 화면에서도 즉시 반영됨)
         if (spotlight != null && spotlight.enabled != IsLightOn)

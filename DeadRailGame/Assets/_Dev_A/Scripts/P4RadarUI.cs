@@ -260,10 +260,14 @@ public class P4RadarUI : MonoBehaviour
             ShowOnRadar(obs.transform.position, centerPos, Color.red, ref blipIndex);
         }
 
-        var items = FindObjectsByType<FarmableItem>(FindObjectsSortMode.None);
-        foreach (var item in items)
+        // FarmableItem is not present in the current branch. Farmable pickups
+        // are already identified by the Item tag in HarpoonFarming, so use the
+        // same project-level marker for radar detection.
+        GameObject[] items = GameObject.FindGameObjectsWithTag("Item");
+        foreach (GameObject item in items)
         {
-            ShowOnRadar(item.transform.position, centerPos, Color.yellow, ref blipIndex);
+            if (item != null)
+                ShowOnRadar(item.transform.position, centerPos, Color.yellow, ref blipIndex);
         }
 
         for (int i = blipIndex; i < _blipPool.Count; i++)

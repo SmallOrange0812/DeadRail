@@ -55,6 +55,9 @@ public class HarpoonFarming : NetworkBehaviour
         if ((TerminalUIManager.Instance != null && TerminalUIManager.Instance.IsUiOpen) ||
             (RailRouteLoop.Instance != null && RailRouteLoop.Instance.Ready && RailRouteLoop.Instance.IsTransition)) return;
 
+        EquipmentPivotController equipment = GetComponent<EquipmentPivotController>();
+        if (equipment != null && equipment.CurrentMode != EquipmentPivotController.EquipmentMode.P3_HarpoonMount) return;
+
         if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame && !isFarming)
         {
             TryFarming();
@@ -218,9 +221,6 @@ public class HarpoonFarming : NetworkBehaviour
 
         if (targetItem != null)
         {
-            RaycastWeapon weapon = GetComponent<RaycastWeapon>();
-            if (weapon != null) weapon.AcquireWeapon();
-
             hasHarpoon = true;
             Destroy(targetItem.gameObject);
             Debug.Log("✅ 보급품 견인 및 획득 완료!");
@@ -280,9 +280,6 @@ public class HarpoonFarming : NetworkBehaviour
     private void OnGUI()
     {
         if (Object == null || !Object.IsValid || playerMovement == null || !playerMovement.IsLocalPlayer) return;
-
-        RaycastWeapon weapon = GetComponent<RaycastWeapon>();
-        if (weapon != null && weapon.hasWeapon) return;
 
         float x = Screen.width / 2f;
         float y = Screen.height / 2f;
