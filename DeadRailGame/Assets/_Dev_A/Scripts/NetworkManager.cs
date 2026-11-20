@@ -302,11 +302,17 @@ public class NetworkManager : MonoBehaviour
         }
 
         PlayerControlInput currentInput = movement.ReadLocalInput();
+        if (movement.isUsingTerminal)
+        {
+            _pendingInput = default;
+            return;
+        }
         _pendingInput.Move = currentInput.Move;
         _pendingInput.Look += currentInput.Look;
         // Spacebar 입력은 다음 네트워크 입력 전송까지 보관합니다.
         _pendingInput.JumpPressed |= currentInput.JumpPressed;
         _pendingInput.InteractPressed |= currentInput.InteractPressed;
+        _pendingInput.SearchlightPressed |= currentInput.SearchlightPressed;
     }
 
     private void SubmitInput(NetworkRunner runner, NetworkInput input)
@@ -315,6 +321,7 @@ public class NetworkManager : MonoBehaviour
         _pendingInput.Look = Vector2.zero;
         _pendingInput.JumpPressed = false;
         _pendingInput.InteractPressed = false;
+        _pendingInput.SearchlightPressed = false;
     }
 
     private void OnDestroy()

@@ -14,6 +14,7 @@ public sealed class RailRouteLoop : NetworkBehaviour
     [Header("Authored layout")]
     public Transform junctionGeometry;
     public Transform farmingGeometry;
+    public StartingRailYard startingYard;
     public Transform trainTransform;
     public PlayableDirector transitionDirector;
     public GameObject[] cinematicObjects;
@@ -40,7 +41,7 @@ public sealed class RailRouteLoop : NetworkBehaviour
     [SerializeField] private Material repairBoxBody;
 
     [Header("Distances in metres")]
-    [Min(100f)] public float cruisingDistance = 300f;
+    [Min(100f)] public float cruisingDistance = 1500f;
     [Min(40f)] public float junctionRevealDistance = 150f;
     [Min(30f)] public float approachDistance = 85f;
     [Min(3f)] public float stopZoneHalfLength = 14f;
@@ -79,6 +80,7 @@ public sealed class RailRouteLoop : NetworkBehaviour
     private const float CutEdgeFade = 0.2f;
     private Image fadeImage;
     private Text hudText;
+    private TreadmillScenery[] straightTrackTiles;
     private RailTravelPhase presentedPhase = (RailTravelPhase)(-1);
     private Camera[] playerCameras;
     private bool[] cameraStates;
@@ -95,7 +97,9 @@ public sealed class RailRouteLoop : NetworkBehaviour
     private void Awake()
     {
         Instance = this;
+        straightTrackTiles = FindObjectsByType<TreadmillScenery>(FindObjectsSortMode.None);
         if (referenceLayout != null) referenceLayout.SetActive(false);
+        if (farmingGeometry != null) farmingGeometry.gameObject.SetActive(false);
         if (cinematicObjects != null) foreach (GameObject obj in cinematicObjects) if (obj != null) obj.SetActive(false);
         leftDistances = BuildDistances(leftPath);
         straightDistances = BuildDistances(straightPath);
@@ -131,6 +135,7 @@ public sealed class RailRouteLoop : NetworkBehaviour
             if (TransitionTime < TransitionDuration) return;
             if (Phase == RailTravelPhase.ExitTransition)
             {
+                train.SetBlackoutFromGameplay(false);
                 VisitNumber++;
                 SelectedRoute = RailRoute.Straight;
                 Phase = RailTravelPhase.Cruise;
@@ -170,6 +175,7 @@ public sealed class RailRouteLoop : NetworkBehaviour
                 PhaseDistance += distance;
                 if (PhaseDistance >= PathLength(LockedRoute))
                 {
+                    if (IsBlackout) train.SetBlackoutFromGameplay(true);
                     StartTransition(RailTravelPhase.EntryTransition);
                 }
                 break;
@@ -240,8 +246,12 @@ public sealed class RailRouteLoop : NetworkBehaviour
         if (IsAboard(player.transform.position) || Vector3.Distance(player.transform.position, supplyPoints[index].position) > 3f) return;
         TreadmillManager train = TreadmillManager.Instance;
         FarmingSupplyKind kind = GetSupplyKind(index);
+        bool personalSupply = kind is FarmingSupplyKind.MedicalKit or FarmingSupplyKind.RepairKit or FarmingSupplyKind.Ammunition;
+        PlayerMovement collector = null;
+        if (personalSupply && (!player.TryGetComponent(out collector) || !collector.HasStateAuthority)) return;
         float amount = kind == FarmingSupplyKind.FuelCapacity || kind == FarmingSupplyKind.BatteryCapacity ? capacityUpgradeAmount : supplyAmount;
-        if (!train.CollectSupply(kind, amount)) return;
+        if (train == null || !train.CollectSupply(kind, amount)) return;
+        if (personalSupply) collector.RecordInventoryPickup(kind);
         CollectedSupplies |= 1 << index;
     }
 
@@ -358,10 +368,11 @@ public sealed class RailRouteLoop : NetworkBehaviour
         switch (Phase)
         {
             case RailTravelPhase.Cruise:
+                string distance = PhaseDistance >= 1000f ? $"{PhaseDistance / 1000f:0.##} km" : $"{PhaseDistance:F0} m";
                 if (SelectedRoute == RailRoute.Straight)
-                    return $"분기까지 {PhaseDistance:F0} m · {RouteName(SelectedRoute)}";
+                    return $"분기까지 {distance} · {RouteName(SelectedRoute)}";
                 SectorNodeData selected = MapNodeManager.Instance.GetRouteNode(SelectedRoute);
-                return $"분기까지 {PhaseDistance:F0} m · {RouteName(SelectedRoute)}\n{selected.sectorName} · 요구 속도 {selected.requiredSpeed} km/h";
+                return $"분기까지 {distance} · {RouteName(SelectedRoute)}\n{selected.sectorName} · 요구 속도 {selected.requiredSpeed} km/h";
             case RailTravelPhase.Junction:
                 if (BranchEntryFailed)
                 {
@@ -407,12 +418,22 @@ public sealed class RailRouteLoop : NetworkBehaviour
             hudText.text = $"구간 {VisitNumber} · {TravelStatus()}";
             if (Phase == RailTravelPhase.Farming && nearbySupply >= 0 && (CollectedSupplies & (1 << nearbySupply)) == 0)
                 hudText.text += $"\n[E] {SupplyName(nearbySupply)} 회수";
+            TreadmillManager train = TreadmillManager.Instance;
+            if (train != null && train.HasSpawned && train.IsBlackout)
+            {
+                hudText.text += train.BackupPowerRemaining > 0f
+                    ? $"\n임시 전력 공급 중 · {train.BackupPowerRemaining:F0}초 남음"
+                    : "\n<color=#FF8E72>정전 발생 · 수동 크랭크 발전기로 전력을 복구하세요</color>";
+            }
         }
     }
 
     public void RefreshCollisionGeometry()
     {
         if (!Ready || junctionGeometry == null || farmingGeometry == null) return;
+        foreach (TreadmillScenery tile in straightTrackTiles)
+            if (tile != null) tile.Present(this);
+        if (startingYard != null) startingYard.Present(TravelledDistance);
         bool beforeCut = IsTransition && TransitionTime < fadeSeconds;
         bool afterCut = IsTransition && TransitionTime >= fadeSeconds + CutsceneSeconds;
         bool showJunction = (Phase == RailTravelPhase.Cruise && PhaseDistance <= junctionRevealDistance) || Phase == RailTravelPhase.Junction || (Phase == RailTravelPhase.EntryTransition && beforeCut);
@@ -420,9 +441,7 @@ public sealed class RailRouteLoop : NetworkBehaviour
             (Phase == RailTravelPhase.ExitTransition && beforeCut) || (Phase == RailTravelPhase.ReapproachTransition && beforeCut) ||
             ((Phase == RailTravelPhase.EntryTransition || Phase == RailTravelPhase.ReapproachTransition) && afterCut);
         junctionGeometry.gameObject.SetActive(showJunction);
-        farmingGeometry.gameObject.SetActive(showFarm);
         if (centralRoadblock != null) centralRoadblock.SetActive(Phase == RailTravelPhase.Cruise || !BranchEntryFailed);
-        if (farmingMaps != null) farmingMaps.Present(ActiveMapIndex, showFarm);
         if (showJunction)
         {
             if (Phase == RailTravelPhase.Cruise)
@@ -436,12 +455,14 @@ public sealed class RailRouteLoop : NetworkBehaviour
         }
         if (showFarm)
             farmingGeometry.position = Vector3.forward * (afterCut ? approachDistance : PhaseDistance);
+        if (farmingMaps != null) farmingMaps.Present(ActiveMapIndex, showFarm, supplyPoints);
+        farmingGeometry.gameObject.SetActive(showFarm);
     }
 
     private void Update()
     {
         nearbySupply = -1;
-        if (!Ready || Phase != RailTravelPhase.Farming || (TerminalUIManager.Instance != null && TerminalUIManager.Instance.IsUiOpen)) return;
+        if (!Ready || Phase != RailTravelPhase.Farming || (TerminalUIManager.Instance != null && TerminalUIManager.Instance.BlocksPlayerInput)) return;
         PlayerRef local = Runner.LocalPlayer;
         if (!Runner.TryGetPlayerObject(local, out NetworkObject player) || IsAboard(player.transform.position)) return;
         for (int i = 0; i < supplyPoints.Length; i++)

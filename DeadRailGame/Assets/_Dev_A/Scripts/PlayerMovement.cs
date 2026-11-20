@@ -7,6 +7,7 @@ public struct PlayerControlInput : INetworkInput
     public Vector2 Look;
     public bool JumpPressed;
     public bool InteractPressed;
+    public bool SearchlightPressed;
 }
 
 public class PlayerMovement : NetworkBehaviour
@@ -26,6 +27,26 @@ public class PlayerMovement : NetworkBehaviour
 
     // ★ 1. 사라졌던 UI 조작 상태 변수 복구!
     [HideInInspector] public bool isUsingTerminal = false;
+
+    [Networked] public int InventoryMedicalKits { get; private set; }
+    [Networked] public int InventoryRepairKits { get; private set; }
+    [Networked] public int InventoryAmmunition { get; private set; }
+
+    internal void RecordInventoryPickup(FarmingSupplyKind kind)
+    {
+        switch (kind)
+        {
+            case FarmingSupplyKind.MedicalKit:
+                InventoryMedicalKits++;
+                break;
+            case FarmingSupplyKind.RepairKit:
+                InventoryRepairKits++;
+                break;
+            case FarmingSupplyKind.Ammunition:
+                InventoryAmmunition += TreadmillManager.AmmunitionPerPickup;
+                break;
+        }
+    }
 
     [Header("마우스 회전 설정")]
     public float mouseSensitivity = 2f;
@@ -75,8 +96,7 @@ public class PlayerMovement : NetworkBehaviour
             anim.applyRootMotion = false;
         }
 
-        // Players no longer carry a personal flashlight. The train searchlight
-        // is the only usable light source, so disable all prefab child lights.
+        // The networked flashlight starts off for every player.
         foreach (Light playerLight in GetComponentsInChildren<Light>(true))
         {
             playerLight.enabled = false;
@@ -248,20 +268,28 @@ public class PlayerMovement : NetworkBehaviour
         if (RailRouteLoop.Instance != null && RailRouteLoop.Instance.Ready && RailRouteLoop.Instance.IsTransition)
             return default;
         if (isUsingTerminal ||
-            (TerminalUIManager.Instance != null && TerminalUIManager.Instance.IsUiOpen))
+            (TerminalUIManager.Instance != null && TerminalUIManager.Instance.BlocksPlayerInput))
         {
             return default;
         }
 
         float zoomRatio = fpsCamera != null ? fpsCamera.fieldOfView / normalFOV : 1f;
         float sensitivity = mouseSensitivity * Mathf.Clamp(zoomRatio, 0.35f, 1f);
+        bool interactPressed = Input.GetKeyDown(KeyCode.E);
+        bool searchlightPressed = false;
+        if (interactPressed && TerminalUIManager.Instance != null && TerminalUIManager.Instance.TryInteractWithAimedTarget(this, out searchlightPressed))
+        {
+            if (isUsingTerminal) return default;
+            interactPressed = false;
+        }
 
         return new PlayerControlInput
         {
             Move = new Vector2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical")),
             Look = new Vector2(Input.GetAxis("Mouse X"), Input.GetAxis("Mouse Y")) * sensitivity,
             JumpPressed = Input.GetKeyDown(KeyCode.Space),
-            InteractPressed = Input.GetKeyDown(KeyCode.E)
+            InteractPressed = interactPressed,
+            SearchlightPressed = searchlightPressed
         };
     }
 
@@ -298,6 +326,12 @@ public class PlayerMovement : NetworkBehaviour
             if (anim != null) anim.SetFloat("Speed", 0f);
             return;
         }
+
+        if (controls.SearchlightPressed && TryGetComponent(out EquipmentPivotController searchlightOperator) &&
+            searchlightOperator.CurrentMode == EquipmentPivotController.EquipmentMode.None &&
+            (RailRouteLoop.Instance == null || !RailRouteLoop.Instance.Ready || !RailRouteLoop.Instance.IsTransition) &&
+            searchlightOperator.TryToggleMode(EquipmentPivotController.EquipmentMode.P2_Searchlight))
+            return;
 
         if (controls.InteractPressed)
         {

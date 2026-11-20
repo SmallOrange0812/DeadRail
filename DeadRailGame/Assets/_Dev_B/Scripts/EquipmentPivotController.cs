@@ -71,6 +71,7 @@ public class EquipmentPivotController : NetworkBehaviour
 
     private Quaternion _initSearchlightYaw;
     private Quaternion _initSearchlightPitch;
+    private Vector3 _searchlightForwardInYaw;
     private Quaternion _initWeaponYaw;
     private Quaternion _initWeaponPitch;
     private bool _initialized = false;
@@ -196,6 +197,8 @@ public class EquipmentPivotController : NetworkBehaviour
         if (searchlightPitchPivot != null)
         {
             _initSearchlightPitch = searchlightPitchPivot.localRotation;
+            if (searchlightYawPivot != null)
+                _searchlightForwardInYaw = searchlightYawPivot.InverseTransformDirection(searchlightPitchPivot.up);
             searchlightLamp = searchlightPitchPivot.GetComponentInChildren<Light>(true);
 
             if (searchlightLamp == null)
@@ -397,17 +400,6 @@ public class EquipmentPivotController : NetworkBehaviour
             }
         }
 
-        if (IsNearSearchlightControl())
-        {
-            Transform station = searchlightControlDesk != null ? searchlightControlDesk : searchlightPitchPivot;
-            float distance = station != null ? Vector3.Distance(transform.position, station.position) : float.PositiveInfinity;
-            if (distance < nearestDistance)
-            {
-                nearestDistance = distance;
-                target = InteractionTarget.Searchlight;
-            }
-        }
-
         return target;
     }
 
@@ -492,8 +484,6 @@ public class EquipmentPivotController : NetworkBehaviour
             return TryToggleMode(EquipmentMode.P2_Searchlight);
         if (CurrentMode == EquipmentMode.P3_HarpoonMount)
             return TryToggleMode(EquipmentMode.P3_HarpoonMount);
-        if (IsEquipmentInteractionTarget(InteractionTarget.Searchlight))
-            return TryToggleMode(EquipmentMode.P2_Searchlight);
         if (IsEquipmentInteractionTarget(InteractionTarget.Harpoon))
             return TryToggleMode(EquipmentMode.P3_HarpoonMount);
         return false;
@@ -627,10 +617,6 @@ public class EquipmentPivotController : NetworkBehaviour
         {
             prompt = "[E] 키를 눌러 P3 거치형 작살 사용";
         }
-        else if (GetNearestInteractionTarget(out _) == InteractionTarget.Searchlight)
-        {
-            prompt = "[E] 키를 눌러 P2 탐조등 사용";
-        }
         else
         {
             return;
@@ -712,11 +698,7 @@ public class EquipmentPivotController : NetworkBehaviour
 
         if (CurrentMode == EquipmentMode.P2_Searchlight)
         {
-            if (searchlightYawPivot != null)
-                searchlightYawPivot.localRotation = _initSearchlightYaw * Quaternion.Euler(yawAxis * yaw);
-
-            if (searchlightPitchPivot != null)
-                searchlightPitchPivot.localRotation = _initSearchlightPitch * Quaternion.Euler(pitchAxis * pitch);
+            AimSearchlight(transform.eulerAngles.y, _playerMovement.CameraPitch);
 
             bool trainHasPower = TreadmillManager.Instance == null || TreadmillManager.Instance.HasPower;
             if (searchlightLamp != null)
@@ -804,6 +786,20 @@ public class EquipmentPivotController : NetworkBehaviour
 
         if (lookTarget != null)
             lookTarget.position = transform.position + transform.forward * 5f + Vector3.up * 1.2f;
+    }
+
+    private void AimSearchlight(float yaw, float pitch)
+    {
+        if (searchlightYawPivot == null || searchlightPitchPivot == null) return;
+
+        Quaternion neutralYaw = searchlightYawPivot.parent.rotation * _initSearchlightYaw;
+        Vector3 neutralForward = neutralYaw * _searchlightForwardInYaw;
+        float neutralHeading = Mathf.Atan2(neutralForward.x, neutralForward.z) * Mathf.Rad2Deg;
+        Quaternion heading = Quaternion.AngleAxis(yaw - neutralHeading, Vector3.up) * neutralYaw;
+        searchlightYawPivot.rotation = heading;
+
+        Vector3 pitchAxisInWorld = Quaternion.Euler(0f, yaw, 0f) * Vector3.right;
+        searchlightPitchPivot.rotation = Quaternion.AngleAxis(pitch, pitchAxisInWorld) * heading * _initSearchlightPitch;
     }
 
     private static Vector3 GetVisualCenter(Transform root)

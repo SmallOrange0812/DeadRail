@@ -12,26 +12,37 @@ public sealed class FarmingMapSet : MonoBehaviour
     private float savedFogDensity;
     private FogMode savedFogMode;
     private AmbientMode savedAmbientMode;
-    private Color savedAmbientLight;
+    private Color savedAmbientSky;
+    private Color savedAmbientEquator;
+    private Color savedAmbientGround;
     private float savedAmbientIntensity;
 
-    private void Awake()
+    private void SaveLighting()
     {
         savedFog = RenderSettings.fog;
         savedFogColor = RenderSettings.fogColor;
         savedFogDensity = RenderSettings.fogDensity;
         savedFogMode = RenderSettings.fogMode;
         savedAmbientMode = RenderSettings.ambientMode;
-        savedAmbientLight = RenderSettings.ambientLight;
+        savedAmbientSky = RenderSettings.ambientSkyColor;
+        savedAmbientEquator = RenderSettings.ambientEquatorColor;
+        savedAmbientGround = RenderSettings.ambientGroundColor;
         savedAmbientIntensity = RenderSettings.ambientIntensity;
     }
 
-    public void Present(int mapIndex, bool visible)
+    public void Present(int mapIndex, bool visible, Transform[] supplies)
     {
         if (presentedIndex != mapIndex)
         {
             for (int i = 0; i < variants.Length; i++)
                 if (variants[i] != null) variants[i].SetActive(i == mapIndex);
+            if (mapIndex >= 0 && mapIndex < variants.Length && variants[mapIndex] != null)
+            {
+                Transform layout = variants[mapIndex].transform.Find("Supply positions");
+                if (layout != null)
+                    for (int i = 0; i < Mathf.Min(layout.childCount, supplies.Length); i++)
+                        supplies[i].position = layout.GetChild(i).position;
+            }
             presentedIndex = mapIndex;
         }
         bool nextUnderground = visible && mapIndex >= MapNodeManager.NormalMapCount;
@@ -39,6 +50,7 @@ public sealed class FarmingMapSet : MonoBehaviour
         underground = nextUnderground;
         if (underground)
         {
+            SaveLighting();
             RenderSettings.fog = true;
             RenderSettings.fogMode = FogMode.ExponentialSquared;
             RenderSettings.fogDensity = 0.025f;
@@ -57,7 +69,9 @@ public sealed class FarmingMapSet : MonoBehaviour
         RenderSettings.fogDensity = savedFogDensity;
         RenderSettings.fogMode = savedFogMode;
         RenderSettings.ambientMode = savedAmbientMode;
-        RenderSettings.ambientLight = savedAmbientLight;
+        RenderSettings.ambientSkyColor = savedAmbientSky;
+        RenderSettings.ambientEquatorColor = savedAmbientEquator;
+        RenderSettings.ambientGroundColor = savedAmbientGround;
         RenderSettings.ambientIntensity = savedAmbientIntensity;
     }
 

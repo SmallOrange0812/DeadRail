@@ -18,7 +18,7 @@ public class MapNodeManager : NetworkBehaviour
     public static MapNodeManager Instance { get; private set; }
 
     [Header("갈림길(Node) 거리 설정")]
-    public float distancePerStage = 300f;
+    public float distancePerStage = 1500f;
 
     [Header("기차 곡선 주행 연출 연결")]
     [Tooltip("하이어라키의 Train 오브젝트 연결 (분기점 통과 시 회전 연출)")]

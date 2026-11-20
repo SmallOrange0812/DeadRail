@@ -3,11 +3,19 @@ using UnityEngine;
 public class TreadmillScenery : MonoBehaviour
 {
     private Renderer[] trackRenderers;
+    private Collider trackGround;
+    private Renderer trackGroundRenderer;
     private Vector3 initialPosition;
 
     private void Awake()
     {
         trackRenderers = GetComponentsInChildren<Renderer>(true);
+        Transform ground = transform.Find("Track ballast");
+        if (ground != null)
+        {
+            trackGround = ground.GetComponent<Collider>();
+            trackGroundRenderer = ground.GetComponent<Renderer>();
+        }
         initialPosition = transform.position;
     }
     [Header("트랙 루프 설정 (8m 선로 x 9개 = 총 72m 기준)")]
@@ -26,11 +34,6 @@ public class TreadmillScenery : MonoBehaviour
         RailRouteLoop route = RailRouteLoop.Instance;
         if (route != null && route.Ready)
         {
-            float z = despawnZ + Mathf.Repeat(initialPosition.z - despawnZ - route.TravelledDistance, Mathf.Max(0.01f, totalTrackLength));
-            transform.position = new Vector3(initialPosition.x, initialPosition.y, z);
-            bool visible = route.ShowStraightTracks;
-            foreach (Renderer trackRenderer in trackRenderers)
-                trackRenderer.enabled = visible && (route.Phase != RailTravelPhase.Cruise || trackRenderer.bounds.min.z <= route.RemainingDistance - 24f);
             return;
         }
         if (TreadmillManager.Instance == null || !TreadmillManager.Instance.isSpawned || TreadmillManager.Instance.CurrentSpeed <= 0f)
@@ -45,6 +48,17 @@ public class TreadmillScenery : MonoBehaviour
             transform.position += new Vector3(0f, 0f, totalTrackLength);
             CheckBranchSpawn();
         }
+    }
+
+    internal void Present(RailRouteLoop route)
+    {
+        float z = despawnZ + Mathf.Repeat(initialPosition.z - despawnZ - route.TravelledDistance, Mathf.Max(0.01f, totalTrackLength));
+        transform.position = new Vector3(initialPosition.x, initialPosition.y, z);
+        bool visible = route.ShowStraightTracks;
+        foreach (Renderer trackRenderer in trackRenderers)
+            trackRenderer.enabled = visible && (route.Phase != RailTravelPhase.Cruise || trackRenderer.bounds.min.z <= route.RemainingDistance - 24f);
+        if (trackGround != null)
+            trackGround.enabled = trackGroundRenderer.enabled;
     }
 
     private void CheckBranchSpawn()

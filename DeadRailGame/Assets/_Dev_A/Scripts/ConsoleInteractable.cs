@@ -2,129 +2,71 @@ using UnityEngine;
 
 public class ConsoleInteractable : MonoBehaviour
 {
-    public enum ConsoleType { P1_DriveCinsole, P4_RadarConsole }
+    public enum ConsoleType { P1_DriveCinsole, P4_RadarConsole, P2_SearchlightConsole }
 
     [Header("콘솔 종류 및 거리 설정")]
     public ConsoleType consoleType = ConsoleType.P1_DriveCinsole;
     [Tooltip("상호작용 가능한 최대 거리 (미터)")]
     public float interactDistance = 2.5f;
 
-    private Transform _localPlayerTransform;
-    private bool _isPlayerNear = false;
-    private GUIStyle _promptstyle;
-
-    private void Update()
+    public string DisplayName => consoleType switch
     {
-        //1. 내 로컬 플레이어 캐릭터 찾기 (최초 1회)
-        if (_localPlayerTransform == null)
-        {
-            foreach (var player in FindObjectsByType<PlayerMovement>(FindObjectsSortMode.None))
-            {
-                if (player.Object != null && player.Object.IsValid && player.IsLocalPlayer)
-                {
-                    _localPlayerTransform = player.transform;
-                    break;
-                }
-            }
-            return;
-        }
+        ConsoleType.P1_DriveCinsole => "P1 기관실 속도 제어 콘솔",
+        ConsoleType.P2_SearchlightConsole => "P2 탐조등 콘솔",
+        _ => "P4 전방 레이더 관제 콘솔"
+    };
 
-        PlayerMovement localPlayer = _localPlayerTransform.GetComponent<PlayerMovement>();
-        _isPlayerNear = localPlayer != null && IsThisNearestInteraction(localPlayer);
+    public static bool IsConsoleNearestInteraction(PlayerMovement player) => FindAimedConsole(player) != null;
 
-        // 여러 콘솔이나 장비가 범위에 겹치면 가장 가까운 대상 하나만 E를 받습니다.
-        if (_isPlayerNear && Input.GetKeyDown(KeyCode.E))
-        {
-            if (TerminalUIManager.Instance != null)
-            {
-                if (consoleType == ConsoleType.P1_DriveCinsole)
-                    TerminalUIManager.Instance.ToggleP1Hacking();
-                else if (consoleType == ConsoleType.P4_RadarConsole)
-                    TerminalUIManager.Instance.ToggleP4Radar();
-            }
-        }
+    internal static ConsoleInteractable FindAimedConsole(PlayerMovement player)
+    {
+        if (!TryGetAimedHit(player, out RaycastHit hit)) return null;
+        return GetConsoleFromHit(player, hit);
     }
 
-    public static bool IsConsoleNearestInteraction(PlayerMovement player)
+    internal static ConsoleInteractable GetConsoleFromHit(PlayerMovement player, RaycastHit hit)
     {
-        if (player == null)
-            return false;
-
-        ConsoleInteractable nearestConsole = FindNearestConsole(player.transform, out float consoleDistance);
-        if (nearestConsole == null)
-            return false;
-
-        EquipmentPivotController equipment = player.GetComponent<EquipmentPivotController>();
-        float equipmentDistance = equipment != null
-            ? equipment.GetNearestInteractionDistance()
-            : float.PositiveInfinity;
-
-        return consoleDistance <= equipmentDistance;
+        ConsoleInteractable console = hit.collider.GetComponentInParent<ConsoleInteractable>();
+        return console != null && console.isActiveAndEnabled
+            && Vector3.Distance(player.fpsCamera.transform.position, hit.point) <= console.interactDistance
+            ? console
+            : null;
     }
 
-    private bool IsThisNearestInteraction(PlayerMovement player)
+    internal static bool TryGetAimedHit(PlayerMovement player, out RaycastHit hit)
     {
-        ConsoleInteractable nearestConsole = FindNearestConsole(player.transform, out float consoleDistance);
-        if (nearestConsole != this)
+        hit = default;
+        if (player == null || player.Object == null || !player.Object.IsValid || !player.IsLocalPlayer
+            || player.IsClimbingLadder || player.CameraOverrideTarget != null)
             return false;
 
-        EquipmentPivotController equipment = player.GetComponent<EquipmentPivotController>();
-        float equipmentDistance = equipment != null
-            ? equipment.GetNearestInteractionDistance()
-            : float.PositiveInfinity;
+        Camera camera = player.fpsCamera;
+        if (camera == null || !camera.isActiveAndEnabled)
+            return false;
 
-        return consoleDistance <= equipmentDistance;
-    }
+        Ray ray = camera.ViewportPointToRay(new Vector3(0.5f, 0.5f));
+        if (!Physics.Raycast(ray, out hit, Mathf.Infinity, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Collide))
+            return false;
 
-    private static ConsoleInteractable FindNearestConsole(Transform player, out float nearestDistance)
-    {
-        ConsoleInteractable nearest = null;
-        nearestDistance = float.PositiveInfinity;
-
-        foreach (ConsoleInteractable console in FindObjectsByType<ConsoleInteractable>(FindObjectsSortMode.None))
+        if (!IsAimSurface(hit.collider, player))
         {
-            if (console == null || !console.isActiveAndEnabled)
-                continue;
-
-            float distance = Vector3.Distance(player.position, console.transform.position);
-            if (distance <= console.interactDistance && distance < nearestDistance)
+            hit = default;
+            float nearest = float.PositiveInfinity;
+            foreach (RaycastHit candidate in Physics.RaycastAll(ray, Mathf.Infinity, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Collide))
             {
-                nearest = console;
-                nearestDistance = distance;
+                if (candidate.distance >= nearest || !IsAimSurface(candidate.collider, player))
+                    continue;
+                hit = candidate;
+                nearest = candidate.distance;
             }
         }
 
-        return nearest;
+        return hit.collider != null;
     }
 
-    //4.가까이 다가갔을 때 화면에 [E] 상호작용 안내 문구 자동 표시
-    private void OnGUI()
+    private static bool IsAimSurface(Collider collider, PlayerMovement player)
     {
-        if (!_isPlayerNear) return;
-        if (TerminalUIManager.Instance != null && TerminalUIManager.Instance.IsUiOpen) return;
-
-        if (_promptstyle == null)
-        {
-            _promptstyle = new GUIStyle(GUI.skin.label);
-            _promptstyle.fontSize = 24;
-            _promptstyle.fontStyle = FontStyle.Bold;
-            _promptstyle.alignment =TextAnchor.MiddleCenter;
-            _promptstyle.normal.textColor = new Color(0.2f, 1f, 0.4f);
-        }
-
-        string consoleName = (consoleType == ConsoleType.P1_DriveCinsole)
-            ? "P1 기관실 속도 제어 콘솔"
-            : "P4 전방 레이더 관제 콘솔";
-
-        float width = 500f;
-        float height = 50f;
-        Rect rect = new Rect((Screen.width - width) / 2f, Screen.height * 0.75f, width, height);
-
-        //글자 가독성을 위한 검은색 그림자
-        GUI.color = Color.black;
-        GUI.Label(new Rect(rect.x + 2, rect.y + 2, rect.width, rect.height), $"[E] 키를 눌러 {consoleName} 열기", _promptstyle);
-
-        GUI.color = Color.white;
-        GUI.Label(rect, $"[E] 키를 눌러 {consoleName} 열기", _promptstyle);
+        return !collider.transform.IsChildOf(player.transform) &&
+            (!collider.isTrigger || collider.GetComponentInParent<ConsoleInteractable>() != null);
     }
 }
