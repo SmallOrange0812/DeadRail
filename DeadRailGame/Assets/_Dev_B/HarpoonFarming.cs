@@ -55,6 +55,9 @@ public class HarpoonFarming : NetworkBehaviour
         if ((TerminalUIManager.Instance != null && TerminalUIManager.Instance.IsUiOpen) ||
             (RailRouteLoop.Instance != null && RailRouteLoop.Instance.Ready && RailRouteLoop.Instance.IsTransition)) return;
 
+        EquipmentPivotController equipment = GetComponent<EquipmentPivotController>();
+        if (equipment != null && equipment.CurrentMode != EquipmentPivotController.EquipmentMode.P3_HarpoonMount) return;
+
         if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame && !isFarming)
         {
             TryFarming();

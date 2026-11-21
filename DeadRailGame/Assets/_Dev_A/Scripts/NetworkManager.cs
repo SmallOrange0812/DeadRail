@@ -77,13 +77,23 @@ public class NetworkManager : MonoBehaviour
         if (result.Ok)
         {
             RegisterPlayerEvents();
-            SpawnPlayer(_runner, _runner.LocalPlayer);
+            StartCoroutine(EnsureLocalPlayerSpawnedAfterTick(_runner));
         }
         else
         {
             Debug.LogError("방 접속 실패: " + result.ShutdownReason);
             Destroy(runnerObject);
         }
+    }
+
+    private IEnumerator EnsureLocalPlayerSpawnedAfterTick(NetworkRunner runner)
+    {
+        // Fusion dispatches PlayerJoined before the first simulation tick completes.
+        // Only backfill after that tick so the local player is registered first.
+        var startupTick = runner.Tick;
+        yield return new WaitUntil(() => runner == null || !runner.IsRunning || runner.Tick != startupTick);
+        if (runner != null && runner.IsRunning && !runner.TryGetPlayerObject(runner.LocalPlayer, out _))
+            SpawnPlayer(runner, runner.LocalPlayer);
     }
 
     private void RegisterPlayerEvents()
@@ -292,12 +302,17 @@ public class NetworkManager : MonoBehaviour
         }
 
         PlayerControlInput currentInput = movement.ReadLocalInput();
+        if (movement.isUsingTerminal)
+        {
+            _pendingInput = default;
+            return;
+        }
         _pendingInput.Move = currentInput.Move;
         _pendingInput.Look += currentInput.Look;
         // Spacebar 입력은 다음 네트워크 입력 전송까지 보관합니다.
         _pendingInput.JumpPressed |= currentInput.JumpPressed;
         _pendingInput.InteractPressed |= currentInput.InteractPressed;
-        _pendingInput.FlashlightPressed |= currentInput.FlashlightPressed;
+        _pendingInput.SearchlightPressed |= currentInput.SearchlightPressed;
     }
 
     private void SubmitInput(NetworkRunner runner, NetworkInput input)
@@ -306,7 +321,7 @@ public class NetworkManager : MonoBehaviour
         _pendingInput.Look = Vector2.zero;
         _pendingInput.JumpPressed = false;
         _pendingInput.InteractPressed = false;
-        _pendingInput.FlashlightPressed = false;
+        _pendingInput.SearchlightPressed = false;
     }
 
     private void OnDestroy()

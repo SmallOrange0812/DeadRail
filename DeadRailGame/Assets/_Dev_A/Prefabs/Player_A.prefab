@@ -419,6 +419,7 @@ GameObject:
   - component: {fileID: 3916449202973097266}
   - component: {fileID: 8590276571872814486}
   - component: {fileID: 7040543316291859935}
+  - component: {fileID: 3805402714077953031}
   - component: {fileID: 6343406471567520509}
   - component: {fileID: 8980258957437312037}
   - component: {fileID: 8154380664944437523}
@@ -494,6 +495,7 @@ MonoBehaviour:
   - {fileID: 3916449202973097266}
   - {fileID: 8590276571872814486}
   - {fileID: 7040543316291859935}
+  - {fileID: 3805402714077953031}
   - {fileID: 6343406471567520509}
   - {fileID: 8980258957437312037}
   ForceRemoteRenderTimeframe: 0
@@ -620,6 +622,20 @@ MonoBehaviour:
   maxDistance: 50
   harpoonDamage: 1
   hasHarpoon: 1
+--- !u!114 &3805402714077953031
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2153200045550794996}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 80bd513ca6efbae4e8eb32e4fbd2ebb6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FlashlightToggle
+  _IsLightOn:
+    RawValue: 0
 --- !u!114 &6343406471567520509
 MonoBehaviour:
   m_ObjectHideFlags: 0
