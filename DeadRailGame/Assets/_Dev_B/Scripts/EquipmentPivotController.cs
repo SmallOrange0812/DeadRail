@@ -10,6 +10,7 @@ public class EquipmentPivotController : NetworkBehaviour
 
     [Header("현재 잡고 있는 장비 모드")]
     [Networked] public EquipmentMode CurrentMode { get; set; } = EquipmentMode.None;
+    [Networked] private float HarpoonRestYaw { get; set; }
 
     [Header("탐조등 모드 시점 전환")]
     public bool isSearchlightFirstPerson = false;
@@ -74,9 +75,6 @@ public class EquipmentPivotController : NetworkBehaviour
     private Quaternion _initWeaponYaw;
     private Quaternion _initWeaponPitch;
     private bool _initialized = false;
-    private EquipmentMode _previousMode = EquipmentMode.None;
-    private Quaternion _harpoonRightHandViewOffset = Quaternion.identity;
-    private bool _hasHarpoonRightHandViewOffset;
     private bool _isCrankPoseActive;
     private Transform _crankHandle;
     private Vector3 _crankLeftGripLocalPosition;
@@ -145,7 +143,6 @@ public class EquipmentPivotController : NetworkBehaviour
         _harpoonFarming = GetComponent<HarpoonFarming>();
         _bodyRig = GetComponentInChildren<Rig>(true);
         _animator = GetComponentInChildren<Animator>(true);
-        _previousMode = CurrentMode;
 
         // Bone and constraint references are authored in Player_A.prefab.
         // RigBuilder builds its graph from OnEnable; rebuilding here during
@@ -249,6 +246,17 @@ public class EquipmentPivotController : NetworkBehaviour
             GameObject marker = new GameObject("Runtime_HarpoonMuzzle");
             generated = marker.transform;
             generated.SetParent(weaponAimPivot, false);
+        }
+
+        if (weaponStock != null && weaponBarrel != null)
+        {
+            Vector3 barrelCenter = GetVisualCenter(weaponBarrel);
+            Vector3 forward = (barrelCenter - GetVisualCenter(weaponStock)).normalized;
+            if (forward.sqrMagnitude > 0f)
+            {
+                generated.position = barrelCenter + forward * GetProjectedVisualExtent(weaponBarrel, forward);
+                return generated;
+            }
         }
 
         if (!TryGetWeaponLocalBounds(out Bounds localBounds))
@@ -587,7 +595,8 @@ public class EquipmentPivotController : NetworkBehaviour
         if (CurrentMode != mode)
         {
             if (mode == EquipmentMode.P2_Searchlight && !IsNearSearchlightControl()) return false;
-            if (mode == EquipmentMode.P3_HarpoonMount && !IsNearWeaponMount()) return false;
+            if (mode == EquipmentMode.P3_HarpoonMount &&
+                (!IsNearWeaponMount() || !TryAlignHarpoonView())) return false;
         }
 
         CurrentMode = CurrentMode == mode ? EquipmentMode.None : mode;
@@ -595,6 +604,31 @@ public class EquipmentPivotController : NetworkBehaviour
         if (CurrentMode != EquipmentMode.P2_Searchlight)
             IsSearchlightOn = false;
         ApplyModeSettings();
+        return true;
+    }
+
+    private bool TryAlignHarpoonView()
+    {
+        Transform stock = weaponStock != null ? weaponStock : weaponGrip;
+        Transform barrel = weaponBarrel != null ? weaponBarrel : weaponMuzzle;
+        if (stock == null || barrel == null || _playerMovement == null)
+            return false;
+
+        if (weaponRootYaw != null) weaponRootYaw.localRotation = _initWeaponYaw;
+        if (weaponAimPivot != null) weaponAimPivot.localRotation = _initWeaponPitch;
+        Vector3 barrelForward = Vector3.ProjectOnPlane(GetVisualCenter(barrel) - GetVisualCenter(stock), Vector3.up);
+        if (barrelForward.sqrMagnitude < 0.001f)
+            return false;
+
+        Vector3 trainForward = searchlightYawPivot != null
+            ? Vector3.ProjectOnPlane(searchlightYawPivot.position - stock.position, Vector3.up)
+            : Vector3.forward;
+        if (trainForward.sqrMagnitude < 0.001f)
+            trainForward = Vector3.forward;
+
+        HarpoonRestYaw = Quaternion.LookRotation(barrelForward, Vector3.up).eulerAngles.y;
+        transform.rotation = Quaternion.LookRotation(trainForward, Vector3.up);
+        _playerMovement.CameraPitch = 0f;
         return true;
     }
 
@@ -666,21 +700,6 @@ public class EquipmentPivotController : NetworkBehaviour
     {
         if (!_initialized || _playerMovement == null) return;
 
-        // Capture the wrist's current pose once on each peer when harpoon mode
-        // begins. Reusing this view-relative rotation prevents the generic
-        // barrel LookRotation from twisting the hand sideways, while still
-        // letting the wrist follow subsequent player view movement.
-        if (CurrentMode == EquipmentMode.P3_HarpoonMount &&
-            _previousMode != EquipmentMode.P3_HarpoonMount)
-        {
-            CaptureHarpoonRightHandViewOffset();
-        }
-        else if (CurrentMode != EquipmentMode.P3_HarpoonMount)
-        {
-            _hasHarpoonRightHandViewOffset = false;
-        }
-        _previousMode = CurrentMode;
-
         ApplyModeSettings();
 
         if (CurrentMode == EquipmentMode.None && !_isCrankPoseActive)
@@ -742,13 +761,23 @@ public class EquipmentPivotController : NetworkBehaviour
         }
         else if (CurrentMode == EquipmentMode.P3_HarpoonMount)
         {
-            float finalWeaponYaw = yaw + weaponYawOffset;
-
+            float finalWeaponYaw = Mathf.DeltaAngle(HarpoonRestYaw, transform.eulerAngles.y);
             if (weaponRootYaw != null)
-                weaponRootYaw.localRotation = _initWeaponYaw * Quaternion.Euler(yawAxis * finalWeaponYaw);
+            {
+                Vector3 upInParent = weaponRootYaw.parent != null
+                    ? weaponRootYaw.parent.InverseTransformDirection(Vector3.up)
+                    : Vector3.up;
+                weaponRootYaw.localRotation = Quaternion.AngleAxis(finalWeaponYaw, upInParent) * _initWeaponYaw;
+            }
 
             if (weaponAimPivot != null)
-                weaponAimPivot.localRotation = _initWeaponPitch * Quaternion.Euler(pitchAxis * pitch);
+            {
+                Vector3 rightInParent = weaponAimPivot.parent != null
+                    ? weaponAimPivot.parent.InverseTransformDirection(transform.right)
+                    : transform.right;
+                weaponAimPivot.localRotation =
+                    Quaternion.AngleAxis(_playerMovement.CameraPitch, rightInParent) * _initWeaponPitch;
+            }
 
             // In the current train model Weapon_Grip is the round side pivot at
             // the mount, not the point where a player should hold the launcher.
@@ -763,8 +792,9 @@ public class EquipmentPivotController : NetworkBehaviour
                 // so a second root-to-stock distance gate turns IK off mid-use.
                 if (_bodyRig != null) _bodyRig.weight = 1f;
 
+                Vector3 stockCenter = GetVisualCenter(rearHandAnchor);
                 Vector3 barrelDirection = weaponBarrel != null
-                    ? weaponBarrel.position - rearHandAnchor.position
+                    ? GetVisualCenter(weaponBarrel) - stockCenter
                     : weaponMuzzle != null
                         ? weaponMuzzle.position - rearHandAnchor.position
                         : weaponAimPivot != null
@@ -774,34 +804,27 @@ public class EquipmentPivotController : NetworkBehaviour
                     barrelDirection = rearHandAnchor.forward;
                 barrelDirection.Normalize();
 
-                // Put the trigger hand on the rear grip. Place the support hand
-                // partway toward the barrel instead of beside the launcher.
-                // Weapon_Stock is a block-shaped rear stock. Its pivot/center
-                // places the wrist inside the stock, which makes the hand look
-                // like it is grabbing the side. Place the trigger hand at the
-                // rear-facing surface instead, measured along the actual barrel
-                // axis (renderer bounds are world-space and remain valid when
-                // the mounted weapon is rotated).
-                Vector3 stockCenter = GetVisualCenter(rearHandAnchor);
+                Quaternion gripRotation = Quaternion.LookRotation(barrelDirection, Vector3.up);
+                Vector3 gripRight = gripRotation * Vector3.right;
+                Vector3 gripUp = gripRotation * Vector3.up;
                 float stockHalfLength = GetProjectedVisualExtent(rearHandAnchor, barrelDirection);
-                Vector3 gripPoint = stockCenter
-                    - barrelDirection * Mathf.Max(0f, stockHalfLength - 0.04f)
+                Vector3 rearGrip = stockCenter - barrelDirection * (stockHalfLength + 0.04f)
+                    - gripUp * 0.10f + gripRight * Mathf.Max(0.10f, handSpread)
                     + rearHandAnchor.TransformDirection(gripPositionOffset);
-                Vector3 handUp = weaponAimPivot != null ? weaponAimPivot.up : transform.up;
-                Quaternion gripRotation = Quaternion.LookRotation(barrelDirection, handUp);
-                Transform supportReference = weaponBarrel != null ? weaponBarrel : weaponMuzzle;
-                float supportHandOffset = supportReference != null
-                    ? Mathf.Clamp(Vector3.Distance(gripPoint, supportReference.position) * 0.45f, 0.22f, 0.55f)
-                    : Mathf.Max(handSpread, 0.22f);
+                Vector3 supportCenter = weaponBarrel != null
+                    ? Vector3.Lerp(stockCenter, GetVisualCenter(weaponBarrel), 0.65f)
+                    : stockCenter + barrelDirection * 0.28f;
+                Vector3 supportGrip = supportCenter - gripUp * 0.13f
+                    - gripRight * Mathf.Max(0.10f, handSpread);
 
                 if (leftHandTarget != null)
                     leftHandTarget.SetPositionAndRotation(
-                        gripPoint + barrelDirection * supportHandOffset,
+                        supportGrip,
                         gripRotation * Quaternion.Euler(leftHandRotOffset));
                 if (rightHandTarget != null)
                     rightHandTarget.SetPositionAndRotation(
-                        gripPoint,
-                        GetHarpoonRightHandRotation());
+                        rearGrip,
+                        gripRotation * Quaternion.Euler(rightHandRotOffset));
             }
         }
 
@@ -834,36 +857,6 @@ public class EquipmentPivotController : NetworkBehaviour
         axis.Normalize();
         Vector3 e = bounds.extents;
         return Mathf.Abs(axis.x) * e.x + Mathf.Abs(axis.y) * e.y + Mathf.Abs(axis.z) * e.z;
-    }
-
-    private void CaptureHarpoonRightHandViewOffset()
-    {
-        if (_animator == null || rightHandTarget == null)
-        {
-            _hasHarpoonRightHandViewOffset = false;
-            return;
-        }
-
-        Transform handBone = _animator.GetBoneTransform(HumanBodyBones.RightHand);
-        Quaternion viewRotation = GetPlayerViewRotation();
-        Quaternion handRotation = handBone != null ? handBone.rotation : rightHandTarget.rotation;
-        _harpoonRightHandViewOffset = Quaternion.Inverse(viewRotation) * handRotation;
-        _hasHarpoonRightHandViewOffset = true;
-    }
-
-    private Quaternion GetHarpoonRightHandRotation()
-    {
-        Quaternion viewRotation = GetPlayerViewRotation();
-        Quaternion handRotation = _hasHarpoonRightHandViewOffset
-            ? viewRotation * _harpoonRightHandViewOffset
-            : viewRotation;
-        return handRotation * Quaternion.Euler(rightHandRotOffset);
-    }
-
-    private Quaternion GetPlayerViewRotation()
-    {
-        float pitch = _playerMovement != null ? _playerMovement.CameraPitch : 0f;
-        return transform.rotation * Quaternion.Euler(pitch, 0f, 0f);
     }
 
     public void BeginCrankPose(Transform handle, Vector3 gripWorldPosition)

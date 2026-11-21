@@ -8,6 +8,13 @@ public enum RailRoute { Left, Straight, Right }
 public enum FarmingSupplyKind { RouteCapacity, FuelCapacity, BatteryCapacity, MedicalKit, RepairKit, Ammunition, Fuel, Battery }
 public enum RailTravelPhase { Cruise, Junction, EntryTransition, Approach, Farming, MissedStop, ExitTransition, ReapproachTransition }
 
+public struct FarmingSupplyState : INetworkStruct
+{
+    public PlayerRef Carrier;
+    public NetworkBool Dropped;
+    public Vector3 DropPosition;
+}
+
 /// <summary>Authority owns route progress. Each peer presents the same authored track around a stationary train.</summary>
 public sealed class RailRouteLoop : NetworkBehaviour
 {
@@ -52,6 +59,7 @@ public sealed class RailRouteLoop : NetworkBehaviour
     [Networked] public NetworkBool DepartureWaiting { get; private set; }
     [Networked] public int ActiveMapIndex { get; private set; }
     [Networked] public NetworkBool BranchEntryFailed { get; private set; }
+    [Networked, Capacity(MaxSupplies)] private NetworkArray<FarmingSupplyState> SupplyStates => default;
 
     public static RailRouteLoop Instance { get; private set; }
     public bool Ready => Object != null && Object.IsValid;
@@ -67,7 +75,11 @@ public sealed class RailRouteLoop : NetworkBehaviour
     public static string RouteName(RailRoute route) => route == RailRoute.Left ? "왼쪽 · 연료 최대 용량 증가" : route == RailRoute.Right ? "오른쪽 · 배터리 최대 용량 증가" : "중앙 · 진입 실패 시 블랙아웃";
 
     private const float CutEdgeFade = 0.2f;
+    private const int MaxSupplies = 30;
+    private const float SupplyReach = 2f;
     private Image fadeImage;
+    private bool wasWithoutPower;
+    private float blackoutScreenUntil;
     private Text hudText;
     private RailTravelPhase presentedPhase = (RailTravelPhase)(-1);
     private Camera[] playerCameras;
@@ -76,6 +88,14 @@ public sealed class RailRouteLoop : NetworkBehaviour
     private float[] leftDistances, straightDistances, rightDistances;
     private MaterialPropertyBlock supplyProperties;
     private int nearbySupply = -1;
+    private GUIStyle pickupPromptStyle;
+    private int localCarriedSupply = -1;
+    private bool localAboard;
+    private RailRoute lastLoggedRoute;
+    private RailTravelPhase lastLoggedPhase = (RailTravelPhase)(-1);
+    private Vector3[] supplyHomePositions;
+    private Collider[][] supplyColliders;
+    private int SupplyCount => Mathf.Min(supplyPoints?.Length ?? 0, MaxSupplies);
 
     private float CutsceneSeconds => UsesTunnelCinematic && transitionDirector != null && transitionDirector.playableAsset != null
         ? Mathf.Clamp((float)transitionDirector.duration, 0.5f, 8f) : 0.25f;
@@ -90,6 +110,13 @@ public sealed class RailRouteLoop : NetworkBehaviour
         straightDistances = BuildDistances(straightPath);
         rightDistances = BuildDistances(rightPath);
         supplyProperties = new MaterialPropertyBlock();
+        supplyHomePositions = new Vector3[SupplyCount];
+        supplyColliders = new Collider[SupplyCount][];
+        for (int i = 0; i < SupplyCount; i++)
+        {
+            supplyHomePositions[i] = supplyPoints[i].localPosition;
+            supplyColliders[i] = supplyPoints[i].GetComponentsInChildren<Collider>(true);
+        }
     }
 
     public override void Spawned()
@@ -112,6 +139,15 @@ public sealed class RailRouteLoop : NetworkBehaviour
         if (!HasStateAuthority) return;
         RefreshCollisionGeometry();
         CountPlayers();
+        if (Phase == RailTravelPhase.Farming)
+        {
+            for (int i = 0; i < SupplyCount; i++)
+            {
+                PlayerRef carrier = SupplyStates[i].Carrier;
+                if (carrier != PlayerRef.None && !Runner.TryGetPlayerObject(carrier, out _))
+                    SupplyStates.Set(i, default);
+            }
+        }
         TreadmillManager train = TreadmillManager.Instance;
         if (IsTransition)
         {
@@ -124,6 +160,7 @@ public sealed class RailRouteLoop : NetworkBehaviour
                 Phase = RailTravelPhase.Cruise;
                 PhaseDistance = cruisingDistance;
                 CollectedSupplies = 0;
+                for (int i = 0; i < SupplyCount; i++) SupplyStates.Set(i, default);
                 ActiveMapIndex = -1;
                 BranchEntryFailed = false;
                 train.ResetFarmingStop();
@@ -150,6 +187,8 @@ public sealed class RailRouteLoop : NetworkBehaviour
                     BranchEntryFailed = train.CurrentSpeed < selected.requiredSpeed;
                     LockedRoute = BranchEntryFailed ? RailRoute.Straight : SelectedRoute;
                     ActiveMapIndex = nodes.GetRouteNode(LockedRoute).mapIndex;
+                    if (BranchEntryFailed && train.HasSpawned && !train.IsBlackout)
+                        train.SetBlackoutFromGameplay(true);
                     Phase = RailTravelPhase.Junction;
                     PhaseDistance = 0f;
                 }
@@ -189,6 +228,7 @@ public sealed class RailRouteLoop : NetworkBehaviour
         CountPlayers();
         DepartureWaiting = PlayersAboard < PlayerCount;
         if (DepartureWaiting) return false;
+        if (HasCarriedSupplies()) return false;
         StartTransition(RailTravelPhase.ExitTransition);
         return true;
     }
@@ -216,16 +256,80 @@ public sealed class RailRouteLoop : NetworkBehaviour
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
     public void Rpc_CollectSupply(int index, RpcInfo info = default)
     {
-        if (Phase != RailTravelPhase.Farming || index < 0 || index >= supplyPoints.Length || index >= 30) return;
+        if (Phase != RailTravelPhase.Farming || index < 0 || index >= SupplyCount) return;
         if ((CollectedSupplies & (1 << index)) != 0) return;
         PlayerRef sender = info.Source == PlayerRef.None ? Runner.LocalPlayer : info.Source;
         if (!Runner.TryGetPlayerObject(sender, out NetworkObject player)) return;
-        if (IsAboard(player.transform.position) || Vector3.Distance(player.transform.position, supplyPoints[index].position) > 3f) return;
-        TreadmillManager train = TreadmillManager.Instance;
-        FarmingSupplyKind kind = GetSupplyKind(index);
-        float amount = kind == FarmingSupplyKind.FuelCapacity || kind == FarmingSupplyKind.BatteryCapacity ? capacityUpgradeAmount : supplyAmount;
-        if (!train.CollectSupply(kind, amount)) return;
-        CollectedSupplies |= 1 << index;
+        FarmingSupplyState state = SupplyStates[index];
+        if (state.Carrier != PlayerRef.None || (!state.Dropped && IsAboard(player.transform.position)) ||
+            Vector3.Distance(player.transform.position, GetSupplyPosition(index, state)) > SupplyReach) return;
+        if (FindCarriedSupply(sender) >= 0) return;
+        state.Carrier = sender;
+        state.Dropped = false;
+        SupplyStates.Set(index, state);
+    }
+
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    public void Rpc_ReleaseSupply(NetworkBool deposit, RpcInfo info = default)
+    {
+        if (Phase != RailTravelPhase.Farming) return;
+        PlayerRef sender = info.Source == PlayerRef.None ? Runner.LocalPlayer : info.Source;
+        int index = FindCarriedSupply(sender);
+        if (index < 0 || !Runner.TryGetPlayerObject(sender, out NetworkObject player)) return;
+
+        if (deposit)
+        {
+            if (!IsAboard(player.transform.position)) return;
+            FarmingSupplyKind kind = GetSupplyKind(index);
+            float amount = kind == FarmingSupplyKind.FuelCapacity || kind == FarmingSupplyKind.BatteryCapacity
+                ? capacityUpgradeAmount : supplyAmount;
+            TreadmillManager train = TreadmillManager.Instance;
+            if (train == null || !train.CollectSupply(kind, amount)) return;
+            CollectedSupplies |= 1 << index;
+            SupplyStates.Set(index, default);
+            string itemName = SupplyName(index).Split('+')[0].TrimEnd();
+            Debug.Log($"{itemName}을(를) 사용하였습니다.");
+            return;
+        }
+
+        Vector3 origin = player.transform.position + Vector3.up * 0.7f;
+        Vector3 forward = player.transform.forward;
+        if (Physics.Raycast(origin, forward, out RaycastHit obstacle, 0.9f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
+            origin += forward * Mathf.Max(0f, obstacle.distance - 0.25f);
+        else
+            origin += forward * 0.9f;
+        if (!Physics.Raycast(origin, Vector3.down, out RaycastHit ground, 2f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore) ||
+            ground.collider.transform.IsChildOf(player.transform)) return;
+
+        float halfHeight = index < supplyRenderers.Length && supplyRenderers[index] != null
+            ? supplyRenderers[index].bounds.extents.y : 0.2f;
+        SupplyStates.Set(index, new FarmingSupplyState
+        {
+            Dropped = true,
+            DropPosition = ground.point + Vector3.up * (halfHeight + 0.02f)
+        });
+    }
+
+    private int FindCarriedSupply(PlayerRef player)
+    {
+        if (player == PlayerRef.None) return -1;
+        for (int i = 0; i < SupplyCount; i++)
+            if (SupplyStates[i].Carrier == player) return i;
+        return -1;
+    }
+
+    private bool HasCarriedSupplies()
+    {
+        for (int i = 0; i < SupplyCount; i++)
+            if (SupplyStates[i].Carrier != PlayerRef.None) return true;
+        return false;
+    }
+
+    private Vector3 GetSupplyPosition(int index, FarmingSupplyState state)
+    {
+        if (state.Dropped) return state.DropPosition;
+        Transform parent = supplyPoints[index].parent;
+        return parent != null ? parent.TransformPoint(supplyHomePositions[index]) : supplyHomePositions[index];
     }
 
     public FarmingSupplyKind GetSupplyKind(int index)
@@ -292,8 +396,13 @@ public sealed class RailRouteLoop : NetworkBehaviour
             case RailTravelPhase.Approach:
                 return IsStopZone ? "정차 가능 구간 · P1 정차 버튼으로 0 km/h" : $"파밍장 정차 구간까지 {Mathf.Max(0f, PhaseDistance - stopZoneHalfLength):F0} m · 일찍 멈추면 저속 이동";
             case RailTravelPhase.Farming:
-                return $"{MapNodeManager.GetMapName(ActiveMapIndex)} 정차 · {(IsBlackout ? "블랙아웃 지하 파밍 · 터널 내부" : RouteName(LockedRoute))}\n탑승 {PlayersAboard}/{PlayerCount}" + (DepartureWaiting ? " · 팀원 탑승 후 출발 가능" : " · 보급품 근처 [E]로 회수");
+                return $"{MapNodeManager.GetMapName(ActiveMapIndex)} 정차 · {(IsBlackout ? "블랙아웃 지하 파밍 · 열차 밖 [L] 손전등" : RouteName(LockedRoute))}\n탑승 {PlayersAboard}/{PlayerCount}" +
+                    (DepartureWaiting ? " · 팀원 탑승 후 출발 가능" :
+                        HasCarriedSupplies() ? " · 운반 물품을 보급하거나 내려놓은 뒤 출발" : " · 보급품 근처 [E]");
             case RailTravelPhase.MissedStop: return "정차 구간을 지났습니다 · P1 재접근 버튼";
+            case RailTravelPhase.EntryTransition: return $"{MapNodeManager.GetMapName(ActiveMapIndex)} 진입 중";
+            case RailTravelPhase.ExitTransition: return "파밍장 출발 · 다음 구간으로 이동";
+            case RailTravelPhase.ReapproachTransition: return "파밍장 정차 구간에 다시 접근 중";
             default: return "구간 전환 중";
         }
     }
@@ -302,21 +411,42 @@ public sealed class RailRouteLoop : NetworkBehaviour
     {
         if (!Ready || junctionGeometry == null || farmingGeometry == null) return;
         RefreshCollisionGeometry();
-        for (int i = 0; i < supplyPoints.Length; i++)
+        for (int i = 0; i < SupplyCount; i++)
         {
             bool available = (CollectedSupplies & (1 << i)) == 0;
             supplyPoints[i].gameObject.SetActive(available);
+            FarmingSupplyState state = SupplyStates[i];
+            if (available)
+            {
+                if (state.Carrier != PlayerRef.None &&
+                    Runner.TryGetPlayerObject(state.Carrier, out NetworkObject carrier))
+                {
+                    Transform body = carrier.transform;
+                    supplyPoints[i].position = body.position + Vector3.up * 1.0f + body.forward * 0.65f;
+                }
+                else
+                {
+                    supplyPoints[i].position = GetSupplyPosition(i, state);
+                }
+            }
+            foreach (Collider itemCollider in supplyColliders[i])
+                itemCollider.enabled = state.Carrier == PlayerRef.None;
+
             Color color = SupplyColor(GetSupplyKind(i));
             supplyProperties.SetColor("_BaseColor", color);
             if (i < supplyRenderers.Length && supplyRenderers[i] != null) supplyRenderers[i].SetPropertyBlock(supplyProperties);
             if (supplyLabels != null && i < supplyLabels.Length && supplyLabels[i] != null) supplyLabels[i].text = SupplyName(i);
         }
         PresentTransition();
+        if (lastLoggedPhase != Phase || lastLoggedRoute != SelectedRoute)
+        {
+            lastLoggedPhase = Phase;
+            lastLoggedRoute = SelectedRoute;
+            Debug.Log($"[열차 진행] 구간 {VisitNumber} · {TravelStatus()}");
+        }
         if (hudText != null)
         {
             hudText.text = $"구간 {VisitNumber} · {TravelStatus()}";
-            if (Phase == RailTravelPhase.Farming && nearbySupply >= 0 && (CollectedSupplies & (1 << nearbySupply)) == 0)
-                hudText.text += $"\n[E] {SupplyName(nearbySupply)} 회수";
         }
     }
 
@@ -351,16 +481,55 @@ public sealed class RailRouteLoop : NetworkBehaviour
     private void Update()
     {
         nearbySupply = -1;
+        localCarriedSupply = -1;
+        localAboard = false;
         if (!Ready || Phase != RailTravelPhase.Farming || (TerminalUIManager.Instance != null && TerminalUIManager.Instance.IsUiOpen)) return;
         PlayerRef local = Runner.LocalPlayer;
-        if (!Runner.TryGetPlayerObject(local, out NetworkObject player) || IsAboard(player.transform.position)) return;
-        for (int i = 0; i < supplyPoints.Length; i++)
+        if (!Runner.TryGetPlayerObject(local, out NetworkObject player)) return;
+        localAboard = IsAboard(player.transform.position);
+        localCarriedSupply = FindCarriedSupply(local);
+        if (localCarriedSupply >= 0)
         {
-            if ((CollectedSupplies & (1 << i)) != 0 || Vector3.Distance(player.transform.position, supplyPoints[i].position) > 3f) continue;
-            nearbySupply = i;
-            if (Input.GetKeyDown(KeyCode.E)) Rpc_CollectSupply(i);
-            break;
+            if (Input.GetKeyDown(KeyCode.F)) Rpc_ReleaseSupply(false);
+            else if (localAboard && Input.GetKeyDown(KeyCode.G)) Rpc_ReleaseSupply(true);
+            return;
         }
+
+        float nearestDistance = SupplyReach;
+        for (int i = 0; i < SupplyCount; i++)
+        {
+            FarmingSupplyState state = SupplyStates[i];
+            if ((CollectedSupplies & (1 << i)) != 0 || state.Carrier != PlayerRef.None ||
+                (localAboard && !state.Dropped)) continue;
+            float distance = Vector3.Distance(player.transform.position, GetSupplyPosition(i, state));
+            if (distance > nearestDistance) continue;
+            nearestDistance = distance;
+            nearbySupply = i;
+        }
+        if (nearbySupply >= 0 && Input.GetKeyDown(KeyCode.E)) Rpc_CollectSupply(nearbySupply);
+    }
+
+    private void OnGUI()
+    {
+        if (nearbySupply < 0 || !Ready || Phase != RailTravelPhase.Farming ||
+            (CollectedSupplies & (1 << nearbySupply)) != 0 ||
+            SupplyStates[nearbySupply].Carrier != PlayerRef.None ||
+            Time.unscaledTime < blackoutScreenUntil)
+            return;
+
+        pickupPromptStyle ??= new GUIStyle(GUI.skin.label)
+        {
+            alignment = TextAnchor.MiddleCenter,
+            fontSize = 20,
+            fontStyle = FontStyle.Bold,
+            wordWrap = true
+        };
+        string prompt = $"[E] {SupplyName(nearbySupply)} 획득하기";
+        var area = new Rect(12f, Screen.height * 0.75f, Screen.width - 24f, 50f);
+        pickupPromptStyle.normal.textColor = Color.black;
+        GUI.Label(new Rect(area.x + 2f, area.y + 2f, area.width, area.height), prompt, pickupPromptStyle);
+        pickupPromptStyle.normal.textColor = new Color(0.22f, 1f, 0.35f);
+        GUI.Label(area, prompt, pickupPromptStyle);
     }
 
     private void PresentTransition()
@@ -388,6 +557,13 @@ public sealed class RailRouteLoop : NetworkBehaviour
             }
         }
         if (!inCinematic && cinematicPlaying) EndCinematic();
+        TreadmillManager train = TreadmillManager.Instance;
+        bool withoutPower = train != null && train.HasSpawned && !train.HasPower;
+        if (withoutPower && !wasWithoutPower)
+            blackoutScreenUntil = Time.unscaledTime + 2f;
+        wasWithoutPower = withoutPower;
+        if (Time.unscaledTime < blackoutScreenUntil)
+            alpha = 1f;
         if (fadeImage != null) fadeImage.color = new Color(0f, 0f, 0f, Mathf.Clamp01(alpha));
     }
 

@@ -12,6 +12,7 @@ public sealed class ManualCrankGenerator : MonoBehaviour
     [Header("상호작용")]
     [SerializeField] private Transform interactionPoint;
     [SerializeField, Min(0.5f)] private float interactionDistance = 2.2f;
+    [SerializeField] private bool placeBesideBatteryPack;
 
     [Header("크랭크 시각 애니메이션")]
     [SerializeField] private Transform crankPivot;
@@ -45,7 +46,61 @@ public sealed class ManualCrankGenerator : MonoBehaviour
         FindCrankPivot();
         if (crankHandle == null && crankPivot != null)
             crankHandle = crankPivot.Find("Crank_Handle");
+        if (placeBesideBatteryPack)
+            PlaceBesideBatteryPack();
         _powerManager = TreadmillManager.Instance;
+    }
+
+    private void PlaceBesideBatteryPack()
+    {
+        Transform generator = crankPivot != null ? crankPivot.parent : null;
+        if (generator == null || generator.name != "Manual_Generator_ROOT" || generator.parent == null)
+            return;
+
+        Transform train = generator.parent;
+        Transform batteryBay = train.Find("Battery_Bay_ROOT");
+        Transform rail = batteryBay != null ? batteryBay.Find("Battery_Tray_Rail.001") : null;
+        if (rail == null || !TryGetVisualBounds(rail, train, out Bounds railBounds) ||
+            !TryGetVisualBounds(generator, train, out Bounds crankBounds))
+            return;
+
+        // Mount the crank on the yellow battery tray rail facing the aisle.
+        generator.localPosition += new Vector3(
+            railBounds.center.x - crankBounds.center.x,
+            railBounds.max.y - crankBounds.min.y,
+            railBounds.center.z - crankBounds.center.z);
+        if (!interactionPoint.IsChildOf(generator))
+            interactionPoint = crankPivot;
+    }
+
+    private static bool TryGetVisualBounds(Transform model, Transform reference, out Bounds bounds)
+    {
+        bounds = default;
+        bool found = false;
+        foreach (MeshRenderer renderer in model.GetComponentsInChildren<MeshRenderer>())
+        {
+            if (!renderer.enabled)
+                continue;
+
+            Bounds meshBounds = renderer.localBounds;
+            Matrix4x4 toTrain = reference.worldToLocalMatrix * renderer.localToWorldMatrix;
+            for (int corner = 0; corner < 8; corner++)
+            {
+                Vector3 point = toTrain.MultiplyPoint3x4(new Vector3(
+                    (corner & 1) == 0 ? meshBounds.min.x : meshBounds.max.x,
+                    (corner & 2) == 0 ? meshBounds.min.y : meshBounds.max.y,
+                    (corner & 4) == 0 ? meshBounds.min.z : meshBounds.max.z));
+                if (found)
+                    bounds.Encapsulate(point);
+                else
+                {
+                    bounds = new Bounds(point, Vector3.zero);
+                    found = true;
+                }
+            }
+        }
+
+        return found;
     }
 
     private void Update()

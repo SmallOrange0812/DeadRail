@@ -36,6 +36,33 @@ public class TreadmillManager : NetworkBehaviour
     public bool isSpawned => (Object != null && Object.IsValid);
     public RailRouteLoop RouteLoop { get; private set; }
 
+    [Header("임시 전력 / 블랙아웃")]
+    [Tooltip("게임 시작 후 첫 정전까지 걸리는 시간")]
+    [SerializeField, Min(1f)] private float initialPowerDuration = 180f;
+    [Tooltip("발전기 미니게임 성공 후 임시 전력이 유지되는 시간")]
+    [SerializeField] private float backupPowerDuration = 60f;
+    [Networked] public NetworkBool IsBlackout { get; private set; }
+    [Networked] public float TimeUntilBlackout { get; private set; }
+    [Networked] public float BackupPowerRemaining { get; private set; }
+    [Networked] public float CrankProgress { get; private set; }
+    [Networked] public NetworkBool NextCrankClockwise { get; private set; }
+    [Networked] public int CrankStrokeSequence { get; private set; }
+    [Networked] public NetworkBool LastCrankClockwise { get; private set; }
+    [Networked] public PlayerRef CrankUser { get; private set; }
+
+    private bool _hasSpawned;
+
+    // Object.IsValid may become true before Fusion has initialized Networked
+    // properties. Keep a separate lifecycle flag for safe UI/read access.
+    public bool HasSpawned => _hasSpawned && Object != null && Object.IsValid;
+
+    public bool HasPower => !HasSpawned || !IsBlackout || BackupPowerRemaining > 0f;
+
+    public override void Despawned(NetworkRunner runner, bool hasState)
+    {
+        _hasSpawned = false;
+    }
+
     private void Awake()
     {
         RouteLoop = GetComponent<RailRouteLoop>();
@@ -78,7 +105,17 @@ public class TreadmillManager : NetworkBehaviour
             Battery = Mathf.Max(0f, batteryCapacity);
             _fuelCapacity = Mathf.Max(1f, fuelCapacity);
             _batteryCapacity = Mathf.Max(1f, batteryCapacity);
+            IsBlackout = false;
+            TimeUntilBlackout = Mathf.Max(1f, initialPowerDuration);
+            BackupPowerRemaining = 0f;
+            CrankProgress = 0f;
+            NextCrankClockwise = true;
+            CrankStrokeSequence = 0;
+            LastCrankClockwise = true;
+            CrankUser = PlayerRef.None;
         }
+
+        _hasSpawned = true;
     }
 
     internal bool CollectSupply(FarmingSupplyKind kind, float amount)
@@ -119,6 +156,8 @@ public class TreadmillManager : NetworkBehaviour
     {
         if (!HasStateAuthority) return;
 
+        UpdateBackupPower();
+
         float deltaTime = Runner.DeltaTime;
         float speed = CurrentSpeed;
 
@@ -142,8 +181,8 @@ public class TreadmillManager : NetworkBehaviour
             if (!Runner.TryGetPlayerObject(player, out NetworkObject playerObject))
                 continue;
 
-            if (playerObject.TryGetComponent(out FlashlightToggle flashlight) &&
-                flashlight.IsLightOn)
+            if ((playerObject.TryGetComponent(out PlayerMovement movement) && movement.IsPersonalFlashlightOn) ||
+                (playerObject.TryGetComponent(out FlashlightToggle flashlight) && flashlight.IsLightOn))
             {
                 activeLightCount++;
             }
@@ -161,6 +200,118 @@ public class TreadmillManager : NetworkBehaviour
                 Debug.LogWarning("🔋 배터리가 바닥나 조명이 꺼집니다.");
             }
         }
+    }
+
+    private void UpdateBackupPower()
+    {
+        if (!IsBlackout)
+        {
+            TimeUntilBlackout = Mathf.Max(0f, TimeUntilBlackout - Runner.DeltaTime);
+            if (TimeUntilBlackout <= 0f)
+                SetBlackoutFromGameplay(true);
+            return;
+        }
+
+        if (BackupPowerRemaining > 0f)
+            BackupPowerRemaining = Mathf.Max(0f, BackupPowerRemaining - Runner.DeltaTime);
+    }
+
+    /// <summary>Called by the authoritative gameplay system that detects a blackout.</summary>
+    public void SetBlackoutFromGameplay(bool isBlackout)
+    {
+        if (!HasStateAuthority)
+            return;
+
+        if (isBlackout && !IsBlackout)
+            Debug.Log("[열차 전력] 정전 발생 · 수동 크랭크 발전기로 전력을 복구하세요.");
+        IsBlackout = isBlackout;
+        TimeUntilBlackout = isBlackout ? 0f : Mathf.Max(1f, initialPowerDuration);
+        BackupPowerRemaining = 0f;
+        CrankProgress = 0f;
+        NextCrankClockwise = true;
+        CrankStrokeSequence = 0;
+        LastCrankClockwise = true;
+        CrankUser = PlayerRef.None;
+    }
+
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    public void Rpc_RegisterCrankStroke(NetworkBool clockwise)
+    {
+        if (!IsBlackout || BackupPowerRemaining > 0f)
+            return;
+
+        if (clockwise.Equals(NextCrankClockwise))
+        {
+            LastCrankClockwise = clockwise;
+            CrankStrokeSequence++;
+            CrankProgress = Mathf.Min(1f, CrankProgress + 1f / 16f);
+            NextCrankClockwise = !NextCrankClockwise;
+
+            if (CrankProgress >= 1f)
+            {
+                BackupPowerRemaining = Mathf.Max(1f, backupPowerDuration);
+                CrankProgress = 0f;
+                Debug.Log("수동 크랭크 발전기: 임시 전력이 복구되었습니다.");
+            }
+        }
+        else
+        {
+            CrankProgress = Mathf.Max(0f, CrankProgress - 0.04f);
+        }
+    }
+
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    public void Rpc_SetCrankUser(PlayerRef player, NetworkBool isUsing)
+    {
+        if (!HasStateAuthority)
+            return;
+
+        if (isUsing)
+        {
+            if (CrankUser == PlayerRef.None || CrankUser == player)
+                CrankUser = player;
+        }
+        else if (CrankUser == player)
+        {
+            CrankUser = PlayerRef.None;
+        }
+    }
+
+    [ContextMenu("테스트/블랙아웃 시작")]
+    private void DebugStartBlackout()
+    {
+        SetBlackoutFromGameplay(true);
+    }
+
+    [ContextMenu("테스트/블랙아웃 해제")]
+    private void DebugClearBlackout()
+    {
+        SetBlackoutFromGameplay(false);
+    }
+
+    private void OnGUI()
+    {
+        if (!HasSpawned)
+            return;
+
+        string message = IsBlackout
+            ? BackupPowerRemaining > 0f
+                ? $"임시 전력 공급 중  {BackupPowerRemaining:F0}초"
+                : "정전 발생! 수동 크랭크 발전기로 전력을 복구하세요."
+            : $"전력 정상  ·  정전까지 {TimeUntilBlackout:F0}초";
+
+        var style = new GUIStyle(GUI.skin.box)
+        {
+            alignment = TextAnchor.MiddleCenter,
+            fontSize = 18,
+            fontStyle = FontStyle.Bold
+        };
+        style.normal.textColor = IsBlackout && BackupPowerRemaining <= 0f
+            ? new Color(1f, 0.35f, 0.25f)
+            : Color.white;
+        float width = Mathf.Min(520f, Screen.width - 24f);
+        style.wordWrap = true;
+        GUI.Box(new Rect((Screen.width - width) * 0.5f, 64f, width, 44f), message, style);
     }
 
     // ★ 추가됨: P1 해킹 퍼즐 성공 시 호출되어 기차 속도를 실제로 변경하는 네트워크 함수

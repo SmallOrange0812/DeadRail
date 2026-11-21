@@ -7,10 +7,15 @@ public struct PlayerControlInput : INetworkInput
     public Vector2 Look;
     public bool JumpPressed;
     public bool InteractPressed;
+    public bool FlashlightPressed;
 }
 
 public class PlayerMovement : NetworkBehaviour
 {
+    [Networked] public NetworkBool IsPersonalFlashlightOn { get; private set; }
+    private Light personalFlashlight;
+    private bool pendingSharedFlashlight;
+    private Quaternion flashlightRestRotation;
     public bool IsLocalPlayer =>
         Runner.GameMode == GameMode.Shared 
         ? HasStateAuthority 
@@ -75,11 +80,18 @@ public class PlayerMovement : NetworkBehaviour
             anim.applyRootMotion = false;
         }
 
-        // Players no longer carry a personal flashlight. The train searchlight
-        // is the only usable light source, so disable all prefab child lights.
         foreach (Light playerLight in GetComponentsInChildren<Light>(true))
         {
             playerLight.enabled = false;
+            if (playerLight.type == LightType.Spot && playerLight.name == "Spot Light")
+            {
+                personalFlashlight = playerLight;
+                flashlightRestRotation = playerLight.transform.localRotation;
+                personalFlashlight.intensity = 28f;
+                personalFlashlight.range = 32f;
+                personalFlashlight.spotAngle = 64f;
+                personalFlashlight.innerSpotAngle = 38f;
+            }
         }
     }
 
@@ -208,6 +220,13 @@ public class PlayerMovement : NetworkBehaviour
 
     public override void Render()
     {
+        if (personalFlashlight != null)
+        {
+            personalFlashlight.enabled = IsPersonalFlashlightOn;
+            if (IsPersonalFlashlightOn)
+                personalFlashlight.transform.localRotation =
+                    Quaternion.Euler(CameraPitch, 0f, 0f) * flashlightRestRotation;
+        }
         if (!IsLocalPlayer) return;
 
         // 터미널 조작 중에는 시점 조작과 줌 입력을 무시합니다.
@@ -261,8 +280,50 @@ public class PlayerMovement : NetworkBehaviour
             Move = new Vector2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical")),
             Look = new Vector2(Input.GetAxis("Mouse X"), Input.GetAxis("Mouse Y")) * sensitivity,
             JumpPressed = Input.GetKeyDown(KeyCode.Space),
-            InteractPressed = Input.GetKeyDown(KeyCode.E)
+            InteractPressed = Input.GetKeyDown(KeyCode.E),
+            FlashlightPressed = Input.GetKeyDown(KeyCode.L)
         };
+    }
+
+    private void Update()
+    {
+        if (Object != null && Object.IsValid && Runner != null &&
+            Runner.GameMode == GameMode.Shared && HasStateAuthority &&
+            !isUsingTerminal && Input.GetKeyDown(KeyCode.L))
+            pendingSharedFlashlight = true;
+    }
+
+    private void UpdatePersonalFlashlight(bool togglePressed)
+    {
+        RailRouteLoop route = RailRouteLoop.Instance;
+        TreadmillManager train = TreadmillManager.Instance;
+        bool inDarkZone = route != null && route.Ready &&
+            route.Phase == RailTravelPhase.Farming && route.IsBlackout &&
+            !route.IsAboard(transform.position);
+        if (TryGetComponent(out EquipmentPivotController equipment) &&
+            equipment.CurrentMode == EquipmentPivotController.EquipmentMode.P2_Searchlight)
+            inDarkZone = false;
+
+        if (!inDarkZone || personalFlashlight == null)
+        {
+            if (togglePressed)
+                Debug.Log("[손전등] 열차 밖의 어두운 파밍 구역에서 사용할 수 있습니다.");
+            IsPersonalFlashlightOn = false;
+            return;
+        }
+
+        if (train == null || !train.HasSpawned || train.Battery <= 0f)
+        {
+            if (togglePressed) Debug.Log("[손전등] 배터리가 부족합니다.");
+            IsPersonalFlashlightOn = false;
+            return;
+        }
+
+        if (togglePressed)
+        {
+            IsPersonalFlashlightOn = !IsPersonalFlashlightOn;
+            Debug.Log(IsPersonalFlashlightOn ? "[손전등] 켜짐" : "[손전등] 꺼짐");
+        }
     }
 
     public override void FixedUpdateNetwork()
@@ -274,11 +335,16 @@ public class PlayerMovement : NetworkBehaviour
         if (Runner.GameMode == GameMode.Shared)
         {
             controls = ReadLocalInput();
+            controls.FlashlightPressed = pendingSharedFlashlight && !isUsingTerminal &&
+                (TerminalUIManager.Instance == null || !TerminalUIManager.Instance.IsUiOpen);
+            pendingSharedFlashlight = false;
         }
         else
         {
             GetInput(out controls);
         }
+
+        UpdatePersonalFlashlight(controls.FlashlightPressed);
 
         if (_isClimbingLadder)
         {
