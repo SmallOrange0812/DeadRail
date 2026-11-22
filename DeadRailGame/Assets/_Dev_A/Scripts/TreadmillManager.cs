@@ -78,6 +78,17 @@ public class TreadmillManager : NetworkBehaviour
         return _networkedSpeed;
     }
 
+    internal float ApplyAutomaticStopSpeed(float remainingDistance, float deltaTime)
+    {
+        const float brakingDeceleration = 4.8f; // m/s²
+        const float approachSpeed = 28f; // km/h, used if the train entered at low speed
+        float brakingSpeed = Mathf.Sqrt(2f * brakingDeceleration * Mathf.Max(0f, remainingDistance)) * 3.6f;
+        float approachTarget = Mathf.Min(brakingSpeed, Mathf.Max(_networkedSpeed, approachSpeed));
+        if (Fuel > 0f) _networkedSpeed = Mathf.MoveTowards(_networkedSpeed, approachTarget, accelerationKmhPerSecond * deltaTime);
+        _networkedSpeed = Mathf.Min(_networkedSpeed, brakingSpeed);
+        return _networkedSpeed;
+    }
+
     internal void ArriveAtFarmingStop()
     {
         _networkedSpeed = 0f;
@@ -221,7 +232,7 @@ public class TreadmillManager : NetworkBehaviour
         }
         if (entryDoors == null || (DoorClosure.x >= 1f && DoorClosure.y >= 1f))
         {
-            if (RouteLoop == null || !RouteLoop.Ready || !RouteLoop.IsTransition)
+            if (RouteLoop == null || !RouteLoop.Ready || (!RouteLoop.IsTransition && RouteLoop.Phase != RailTravelPhase.Approach))
                 _networkedSpeed = Mathf.MoveTowards(_networkedSpeed, TargetSpeed, accelerationKmhPerSecond * deltaTime);
         }
         UpdateTrainResources(deltaTime);

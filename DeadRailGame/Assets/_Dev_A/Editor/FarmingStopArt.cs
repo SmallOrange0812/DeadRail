@@ -20,6 +20,49 @@ public static partial class FarmingMapAuthoring
             case 7: art.BlackMarket(); break;
             default: throw new ArgumentOutOfRangeException(nameof(index));
         }
+        EnsureDepartureCorridor(root, index);
+    }
+
+    [MenuItem("DeadRail/Route/Apply farming departure scenery")]
+    private static void ApplyDepartureScenery()
+    {
+        if (EditorApplication.isPlayingOrWillChangePlaymode) throw new InvalidOperationException("Exit Play Mode first.");
+        for (int index = 0; index < MapNodeManager.MapCount; index++)
+        {
+            string path = $"{VariantFolder}/Stop_{index + 1:00}.prefab";
+            GameObject prefab = PrefabUtility.LoadPrefabContents(path);
+            try
+            {
+                if (!EnsureDepartureCorridor(prefab.transform, index)) continue;
+                if (PrefabUtility.SaveAsPrefabAsset(prefab, path) == null) throw new InvalidOperationException($"Could not save {path}.");
+            }
+            finally { PrefabUtility.UnloadPrefabContents(prefab); }
+        }
+        AssetDatabase.SaveAssets();
+        Debug.Log("[Rail landscape] Departure scenery applied to all farming maps.");
+    }
+
+    private static bool EnsureDepartureCorridor(Transform root, int index)
+    {
+        bool underground = index >= MapNodeManager.NormalMapCount;
+        string name = underground ? "Underground departure corridor" : "Outdoor departure corridor";
+        if (root.Find(name) != null) return false;
+        string path = $"{VariantFolder}/{(underground ? "UndergroundDeparture" : "OutdoorDeparture")}.prefab";
+        GameObject asset = AssetDatabase.LoadAssetAtPath<GameObject>(path);
+        if (asset == null)
+        {
+            var corridor = new GameObject(name);
+            try
+            {
+                new StopArt(corridor.transform, index).DepartureCorridor(underground);
+                asset = PrefabUtility.SaveAsPrefabAsset(corridor, path);
+                if (asset == null) throw new InvalidOperationException($"Could not save {path}.");
+            }
+            finally { UnityEngine.Object.DestroyImmediate(corridor); }
+        }
+        var instance = (GameObject)PrefabUtility.InstantiatePrefab(asset, root);
+        Undo.RegisterCreatedObjectUndo(instance, "Apply farming departure corridor");
+        return true;
     }
 
     private sealed class StopArt
@@ -247,6 +290,41 @@ public static partial class FarmingMapAuthoring
             Light("Market lantern", 10.8f, 2.6f, 10, new Color(1f, .55f, .24f), 14, 15);
             Light("Cargo inspection lamp", 13.5f, 3.35f, -17f, new Color(1f, .65f, .32f), 13, 13);
             Supply((8,-16), (12,-8), (8,-2), (13,2), (8,9), (11,17));
+        }
+
+        public void DepartureCorridor(bool underground)
+        {
+            Material signal = RailLandscapeAuthoring.NightSignalMaterial();
+            foreach (int side in new[] { -1, 1 })
+            {
+                G("Trackside service shoulder", underground ? dark : soil, side * 6.9f, -.205f, 43f, 6.9f, .13f, 62f, true);
+                for (int i = 0; i < 8; i++)
+                {
+                    float z = 21 + i * 7.4f;
+                    G("Reflective limit post", steel, side * 4.9f, .37f, z, .15f, .99f, .16f);
+                    G("Limit marker face", warning, side * 4.9f, .74f, z - .09f, .15f, .18f, .04f);
+                    if (!underground)
+                    {
+                        G("Corridor retaining block", dark, side * 15.9f, .32f, z, .47f, 1.17f, 6.8f, true);
+                        if (i % 2 == 0) G("Abandoned cable drum", timber, side * 10.7f, .34f, z, 1.1f, .89f, .77f, true, side * 21);
+                    }
+                }
+            }
+
+            foreach (float z in new[] { 23f, 52f })
+            {
+                G("Exit signal mast", steel, -3.9f, 1.45f, z, .16f, 3.12f, .17f);
+                G("Exit signal housing", black, -3.9f, 2.8f, z, .47f, .72f, .31f);
+                G("Exit signal lens", signal, -3.9f, 2.94f, z - .17f, .16f, .16f, .04f);
+                Light("Railway exit signal spill", -2.4f, 1.28f, z - 1f, new Color(1f, .07f, .024f), 9.5f, 4.3f);
+                if (underground) continue;
+                foreach (int side in new[] { -1, 1 })
+                    G("Exit catenary post", steel, side * 5.85f, 3.37f, z + 2, .23f, 7.1f, .24f);
+                Beam("Exit catenary crossbeam", rust, V(-5.85f, 6.55f, z + 2), V(5.85f, 6.55f, z + 2), .15f);
+                Beam("Catenary crossbrace", steel, V(-5.85f, 5.58f, z + 2), V(-3.8f, 6.55f, z + 2), .105f);
+            }
+            if (!underground)
+                Beam("Overhead departure wire", steel, V(0, 5.8f, 10), V(0, 5.8f, 76f), .035f);
         }
 
         private void OutdoorGround(Material finish)

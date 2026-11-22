@@ -90,25 +90,30 @@ public static class StartingRailYardAuthoring
 
     private static void SaveEvening(Scene scene)
     {
+        ApplyNightLighting(scene);
+        EditorSceneManager.MarkSceneDirty(scene);
+        if (!EditorSceneManager.SaveScene(scene))
+            throw new IOException("Could not save night lighting in the main scene.");
+    }
+
+    internal static void ApplyNightLighting(Scene scene)
+    {
         Light sun = scene.GetRootGameObjects().Single(root => root.name == "Directional Light").GetComponent<Light>();
-        Undo.RecordObjects(new UnityEngine.Object[] { sun, sun.transform }, "Set evening sunlight");
-        sun.color = Tint(255, 143, 102);
-        sun.intensity = 0.60f;
-        sun.transform.rotation = Quaternion.Euler(2.5f, 120f, 0f);
+        Undo.RecordObjects(new UnityEngine.Object[] { sun, sun.transform }, "Set night fill light");
+        sun.color = Tint(143, 168, 218);
+        sun.intensity = 0.21f;
+        sun.transform.rotation = Quaternion.Euler(30f, 122f, 0f);
         RenderSettings.sun = sun;
         RenderSettings.skybox = Depot.CreateSky();
         RenderSettings.ambientMode = AmbientMode.Trilight;
-        RenderSettings.ambientSkyColor = Tint(109, 120, 157);
-        RenderSettings.ambientEquatorColor = Tint(89, 93, 115);
-        RenderSettings.ambientGroundColor = Tint(55, 52, 66);
+        RenderSettings.ambientSkyColor = Tint(66, 80, 109);
+        RenderSettings.ambientEquatorColor = Tint(43, 51, 70);
+        RenderSettings.ambientGroundColor = Tint(25, 30, 44);
         RenderSettings.fog = true;
         RenderSettings.fogMode = FogMode.Linear;
-        RenderSettings.fogColor = Tint(101, 106, 128);
-        RenderSettings.fogStartDistance = 10f;
-        RenderSettings.fogEndDistance = 88f;
-        EditorSceneManager.MarkSceneDirty(scene);
-        if (!EditorSceneManager.SaveScene(scene))
-            throw new IOException("Could not save evening lighting in the main scene.");
+        RenderSettings.fogColor = Tint(38, 46, 63);
+        RenderSettings.fogStartDistance = 17f;
+        RenderSettings.fogEndDistance = 105f;
     }
 
     private static Color Tint(int r, int g, int b) => new Color32((byte)r, (byte)g, (byte)b, 255);

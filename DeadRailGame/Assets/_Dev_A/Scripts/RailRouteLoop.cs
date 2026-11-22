@@ -6,7 +6,7 @@ using UnityEngine.UI;
 
 public enum RailRoute { Left, Straight, Right }
 public enum FarmingSupplyKind { RouteCapacity, FuelCapacity, BatteryCapacity, MedicalKit, RepairKit, Ammunition, Fuel, Battery }
-public enum RailTravelPhase { Cruise, Junction, EntryTransition, Approach, Farming, MissedStop, ExitTransition, ReapproachTransition }
+public enum RailTravelPhase { Cruise, Junction, EntryTransition, Approach, Farming, MissedStop, ExitTransition, ReapproachTransition, Departing }
 
 /// <summary>Authority owns route progress. Each peer presents the same authored track around a stationary train.</summary>
 public sealed class RailRouteLoop : NetworkBehaviour
@@ -15,6 +15,7 @@ public sealed class RailRouteLoop : NetworkBehaviour
     public Transform junctionGeometry;
     public Transform farmingGeometry;
     public StartingRailYard startingYard;
+    [SerializeField] private RailSideScenery sideScenery;
     public Transform trainTransform;
     public PlayableDirector transitionDirector;
     public GameObject[] cinematicObjects;
@@ -78,6 +79,8 @@ public sealed class RailRouteLoop : NetworkBehaviour
     public static string RouteName(RailRoute route) => route == RailRoute.Left ? "왼쪽 · 연료 최대 용량 증가" : route == RailRoute.Right ? "오른쪽 · 배터리 최대 용량 증가" : "미선택 · 중앙 블랙아웃";
 
     private const float CutEdgeFade = 0.2f;
+    private const float DepartureRunSeconds = 3f;
+    private const float OutdoorDepartureShotSeconds = 2.25f;
     private Image fadeImage;
     private Text hudText;
     private TreadmillScenery[] straightTrackTiles;
@@ -85,13 +88,15 @@ public sealed class RailRouteLoop : NetworkBehaviour
     private Camera[] playerCameras;
     private bool[] cameraStates;
     private bool cinematicPlaying;
+    private Camera departureCamera;
+    private bool UsesOutdoorDepartureShot => Phase == RailTravelPhase.ExitTransition && !IsBlackout;
     private float[] leftDistances, straightDistances, rightDistances;
     private MaterialPropertyBlock supplyProperties;
     private (FarmingSupplyKind kind, GameObject instance)[] supplyVisuals;
     private int nearbySupply = -1;
 
     private float CutsceneSeconds => UsesTunnelCinematic && transitionDirector != null && transitionDirector.playableAsset != null
-        ? Mathf.Clamp((float)transitionDirector.duration, 0.5f, 8f) : 0.25f;
+        ? Mathf.Clamp((float)transitionDirector.duration, 0.5f, 8f) : UsesOutdoorDepartureShot ? OutdoorDepartureShotSeconds : 0.25f;
     private float TransitionDuration => fadeSeconds * 2f + CutsceneSeconds;
 
     private void Awake()
@@ -129,9 +134,16 @@ public sealed class RailRouteLoop : NetworkBehaviour
         RefreshCollisionGeometry();
         CountPlayers();
         TreadmillManager train = TreadmillManager.Instance;
+        float deltaTime = Runner.DeltaTime;
         if (IsTransition)
         {
-            TransitionTime += Runner.DeltaTime;
+            if (UsesOutdoorDepartureShot && TransitionTime < fadeSeconds + CutsceneSeconds)
+            {
+                float shotDistance = WorldSpeed * Mathf.Min(deltaTime, fadeSeconds + CutsceneSeconds - TransitionTime);
+                PhaseDistance -= shotDistance;
+                TravelledDistance += shotDistance;
+            }
+            TransitionTime += deltaTime;
             if (TransitionTime < TransitionDuration) return;
             if (Phase == RailTravelPhase.ExitTransition)
             {
@@ -143,6 +155,7 @@ public sealed class RailRouteLoop : NetworkBehaviour
                 CollectedSupplies = 0;
                 ActiveMapIndex = -1;
                 BranchEntryFailed = false;
+                TransitionTime = 0f;
                 train.ResetFarmingStop();
                 MapNodeManager.Instance?.BeginRouteStage(VisitNumber);
             }
@@ -154,7 +167,9 @@ public sealed class RailRouteLoop : NetworkBehaviour
             return;
         }
 
-        float distance = WorldSpeed * Runner.DeltaTime;
+        float distance = Phase == RailTravelPhase.Approach
+            ? Mathf.Min(Mathf.Max(0f, PhaseDistance), train.ApplyAutomaticStopSpeed(PhaseDistance, deltaTime) / 3.6f * deltaTime)
+            : WorldSpeed * deltaTime;
         TravelledDistance += distance;
         switch (Phase)
         {
@@ -181,14 +196,25 @@ public sealed class RailRouteLoop : NetworkBehaviour
                 break;
             case RailTravelPhase.Approach:
                 PhaseDistance -= distance;
-                if (train.CurrentSpeed <= 0f && Mathf.Abs(PhaseDistance) <= stopZoneHalfLength)
+                if (PhaseDistance <= .025f)
                 {
+                    TravelledDistance += Mathf.Max(0f, PhaseDistance);
+                    PhaseDistance = 0f;
                     Phase = RailTravelPhase.Farming;
                     train.ArriveAtFarmingStop();
                 }
-                else if (PhaseDistance < -stopZoneHalfLength)
+                break;
+            case RailTravelPhase.Departing:
+                PhaseDistance -= distance;
+                if (distance > 0f)
                 {
-                    Phase = RailTravelPhase.MissedStop;
+                    TransitionTime += deltaTime;
+                    if (TransitionTime >= DepartureRunSeconds) StartTransition(RailTravelPhase.ExitTransition, fadeSeconds);
+                }
+                else if (train.Fuel <= 0f)
+                {
+                    StartTransition(RailTravelPhase.Farming);
+                    train.ArriveAtFarmingStop();
                 }
                 break;
             case RailTravelPhase.MissedStop:
@@ -202,19 +228,20 @@ public sealed class RailRouteLoop : NetworkBehaviour
 
     public bool TrySetSpeed(float speed)
     {
-        if (IsTransition) return false;
+        if (IsTransition || Phase == RailTravelPhase.Approach) return false;
+        if (Phase == RailTravelPhase.Departing) return speed > 0f;
         if (Phase != RailTravelPhase.Farming || speed <= 0f) return true;
         CountPlayers();
         DepartureWaiting = PlayersAboard < PlayerCount;
         if (DepartureWaiting) return false;
-        StartTransition(RailTravelPhase.ExitTransition);
+        StartTransition(RailTravelPhase.Departing);
         return true;
     }
 
-    private void StartTransition(RailTravelPhase phase)
+    private void StartTransition(RailTravelPhase phase, float initialTime = 0f)
     {
         Phase = phase;
-        TransitionTime = 0f;
+        TransitionTime = initialTime;
         DepartureWaiting = false;
     }
 
@@ -381,9 +408,12 @@ public sealed class RailRouteLoop : NetworkBehaviour
                 }
                 return $"{MapNodeManager.GetMapName(ActiveMapIndex)} 진입 · {RouteName(LockedRoute)}";
             case RailTravelPhase.Approach:
-                return IsStopZone ? "정차 가능 구간 · P1 정차 버튼으로 0 km/h" : $"파밍장 정차 구간까지 {Mathf.Max(0f, PhaseDistance - stopZoneHalfLength):F0} m · 일찍 멈추면 저속 이동";
+                if (TreadmillManager.Instance.Fuel <= 0f) return "연료 부족 · 연료 보충 후 자동 정차를 재개합니다";
+                return $"{MapNodeManager.GetMapName(ActiveMapIndex)} 자동 정차 · 정차 지점까지 {PhaseDistance:F0} m";
             case RailTravelPhase.Farming:
                 return $"{MapNodeManager.GetMapName(ActiveMapIndex)} 정차 · {(IsBlackout ? "블랙아웃 지하 파밍 · 터널 내부" : RouteName(LockedRoute))}\n탑승 {PlayersAboard}/{PlayerCount}" + (DepartureWaiting ? " · 팀원 탑승 후 출발 가능" : " · 보급품 근처 [E]로 회수");
+            case RailTravelPhase.Departing:
+                return $"{MapNodeManager.GetMapName(ActiveMapIndex)} 출발 중";
             case RailTravelPhase.MissedStop: return "정차 구간을 지났습니다 · P1 재접근 버튼";
             default: return "구간 전환 중";
         }
@@ -434,11 +464,12 @@ public sealed class RailRouteLoop : NetworkBehaviour
         foreach (TreadmillScenery tile in straightTrackTiles)
             if (tile != null) tile.Present(this);
         if (startingYard != null) startingYard.Present(TravelledDistance);
+        if (sideScenery != null) sideScenery.Present(this);
         bool beforeCut = IsTransition && TransitionTime < fadeSeconds;
         bool afterCut = IsTransition && TransitionTime >= fadeSeconds + CutsceneSeconds;
         bool showJunction = (Phase == RailTravelPhase.Cruise && PhaseDistance <= junctionRevealDistance) || Phase == RailTravelPhase.Junction || (Phase == RailTravelPhase.EntryTransition && beforeCut);
-        bool showFarm = Phase == RailTravelPhase.Approach || Phase == RailTravelPhase.Farming || Phase == RailTravelPhase.MissedStop ||
-            (Phase == RailTravelPhase.ExitTransition && beforeCut) || (Phase == RailTravelPhase.ReapproachTransition && beforeCut) ||
+        bool showFarm = Phase == RailTravelPhase.Approach || Phase == RailTravelPhase.Farming || Phase == RailTravelPhase.MissedStop || Phase == RailTravelPhase.Departing ||
+            (Phase == RailTravelPhase.ExitTransition && (beforeCut || (UsesOutdoorDepartureShot && !afterCut))) || (Phase == RailTravelPhase.ReapproachTransition && beforeCut) ||
             ((Phase == RailTravelPhase.EntryTransition || Phase == RailTravelPhase.ReapproachTransition) && afterCut);
         junctionGeometry.gameObject.SetActive(showJunction);
         if (centralRoadblock != null) centralRoadblock.SetActive(Phase == RailTravelPhase.Cruise || !BranchEntryFailed);
@@ -481,21 +512,27 @@ public sealed class RailRouteLoop : NetworkBehaviour
             presentedPhase = Phase;
             if (IsTransition) TerminalUIManager.Instance?.CloseAllTerminals();
         }
-        float alpha = 0f;
+        float alpha = Phase == RailTravelPhase.Departing ?
+            Mathf.InverseLerp(DepartureRunSeconds - fadeSeconds, DepartureRunSeconds, TransitionTime) : 0f;
         bool inCinematic = false;
         if (IsTransition)
         {
             float cutTime = TransitionTime - fadeSeconds;
-            inCinematic = UsesTunnelCinematic && cutTime >= 0f && cutTime < CutsceneSeconds;
+            inCinematic = (UsesOutdoorDepartureShot || (UsesTunnelCinematic && transitionDirector != null && transitionDirector.playableAsset != null)) &&
+                cutTime >= 0f && cutTime < CutsceneSeconds;
             if (TransitionTime < fadeSeconds) alpha = TransitionTime / fadeSeconds;
             else if (inCinematic)
                 alpha = Mathf.Max(1f - cutTime / CutEdgeFade, 1f - (CutsceneSeconds - cutTime) / CutEdgeFade);
             else alpha = 1f - (cutTime - CutsceneSeconds) / fadeSeconds;
-            if (inCinematic && transitionDirector != null)
+            if (inCinematic)
             {
                 if (!cinematicPlaying) BeginCinematic();
-                transitionDirector.time = cutTime;
-                transitionDirector.Evaluate();
+                if (UsesOutdoorDepartureShot) PresentDepartureCamera(cutTime / CutsceneSeconds);
+                else
+                {
+                    transitionDirector.time = cutTime;
+                    transitionDirector.Evaluate();
+                }
             }
         }
         if (!inCinematic && cinematicPlaying) EndCinematic();
@@ -505,7 +542,6 @@ public sealed class RailRouteLoop : NetworkBehaviour
     private void BeginCinematic()
     {
         cinematicPlaying = true;
-        if (referenceLayout != null) referenceLayout.SetActive(true);
         playerCameras = FindObjectsByType<Camera>(FindObjectsSortMode.None);
         cameraStates = new bool[playerCameras.Length];
         for (int i = 0; i < playerCameras.Length; i++)
@@ -513,12 +549,36 @@ public sealed class RailRouteLoop : NetworkBehaviour
             cameraStates[i] = playerCameras[i].enabled;
             playerCameras[i].enabled = false;
         }
-        transitionDirector.RebuildGraph();
+        if (UsesOutdoorDepartureShot)
+        {
+            if (departureCamera == null)
+            {
+                var cameraObject = new GameObject("Farming departure camera");
+                cameraObject.transform.SetParent(transform, false);
+                departureCamera = cameraObject.AddComponent<Camera>();
+                departureCamera.fieldOfView = 50f;
+            }
+            departureCamera.gameObject.SetActive(true);
+            departureCamera.enabled = true;
+        }
+        else
+        {
+            if (referenceLayout != null) referenceLayout.SetActive(true);
+            transitionDirector.RebuildGraph();
+        }
+    }
+
+    private void PresentDepartureCamera(float progress)
+    {
+        Vector3 cameraPosition = trainTransform.TransformPoint(new Vector3(-7.4f, 3.8f, Mathf.Lerp(7f, 2.5f, progress)));
+        Vector3 focus = trainTransform.TransformPoint(new Vector3(0f, 1.8f, Mathf.Lerp(1.4f, 3.8f, progress)));
+        departureCamera.transform.SetPositionAndRotation(cameraPosition, Quaternion.LookRotation(focus - cameraPosition));
     }
 
     private void EndCinematic()
     {
-        transitionDirector.Stop();
+        if (departureCamera != null) departureCamera.gameObject.SetActive(false);
+        if (transitionDirector != null) transitionDirector.Stop();
         if (referenceLayout != null) referenceLayout.SetActive(false);
         foreach (GameObject obj in cinematicObjects) if (obj != null) obj.SetActive(false);
         for (int i = 0; i < playerCameras.Length; i++) if (playerCameras[i] != null) playerCameras[i].enabled = cameraStates[i];

@@ -9,11 +9,13 @@ public sealed class StartingRailYard : MonoBehaviour
     private Transform legacyTracks;
     private Vector3 legacyTrackPosition;
     private float fogEnd;
+    private bool outdoorFog;
 
     private void Awake()
     {
         startingPosition = scenery.localPosition;
         fogEnd = RenderSettings.fogEndDistance;
+        outdoorFog = RenderSettings.fog;
         legacyTracks = transform.parent != null ? transform.parent.Find("YardTrack_Static") : null;
         if (legacyTracks != null) legacyTrackPosition = legacyTracks.localPosition;
     }
@@ -31,8 +33,8 @@ public sealed class StartingRailYard : MonoBehaviour
         if (scenery.gameObject.activeSelf != visible)
         {
             scenery.gameObject.SetActive(visible);
-            RenderSettings.fog = visible;
-            RenderSettings.fogEndDistance = fogEnd;
+            RenderSettings.fog = outdoorFog;
+            RenderSettings.fogEndDistance = visible ? fogEnd : fogEnd * 3f;
         }
         if (visible)
         {
