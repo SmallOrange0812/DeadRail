@@ -201,7 +201,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a09ce10e0c6e2e54ea9dbfa7c3c6911a, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TreadmillScenery
   despawnZ: -16
   totalTrackLength: 128
@@ -810,7 +810,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2db31d2fe0de0f242a0552adf79124f8, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TrainDoorSwitch
   doorIndex: 1
   opensDoor: 0
@@ -917,7 +917,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a09ce10e0c6e2e54ea9dbfa7c3c6911a, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TreadmillScenery
   despawnZ: -16
   totalTrackLength: 128
@@ -2611,7 +2611,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2db31d2fe0de0f242a0552adf79124f8, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TrainDoorSwitch
   doorIndex: 1
   opensDoor: 1
@@ -4714,7 +4714,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a09ce10e0c6e2e54ea9dbfa7c3c6911a, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TreadmillScenery
   despawnZ: -16
   totalTrackLength: 128
@@ -7092,7 +7092,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: b120aa1cfca2b3e438d772367a6f99b5, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TrainEntryDoors
   leftDoor: {fileID: 1070591827}
   rightDoor: {fileID: 1759613622}
@@ -10817,10 +10817,11 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 3c6aee10f7bc43d6aa7efb70bb7f6c31, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ManualCrankGenerator
   interactionPoint: {fileID: 529583433}
   interactionDistance: 1.35
+  placeBesideBatteryPack: 0
   crankPivot: {fileID: 0}
   crankHandle: {fileID: 0}
   crankHandSurfaceOffset: 0.07
@@ -12587,7 +12588,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2db31d2fe0de0f242a0552adf79124f8, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TrainDoorSwitch
   doorIndex: 0
   opensDoor: 1
@@ -20786,7 +20787,7 @@ Animator:
   m_LinearVelocityBlending: 0
   m_StabilizeFeet: 0
   m_AnimatePhysics: 0
-  m_WarningMessage:
+  m_WarningMessage: 
   m_HasTransformHierarchy: 1
   m_AllowConstantClipSamplingOptimization: 1
   m_KeepAnimatorStateOnDisable: 0
@@ -20911,7 +20912,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
   SortKey: 160671115
   SendPriority: 1
@@ -30226,7 +30227,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a09ce10e0c6e2e54ea9dbfa7c3c6911a, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TreadmillScenery
   despawnZ: -16
   totalTrackLength: 128
@@ -38149,7 +38150,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2db31d2fe0de0f242a0552adf79124f8, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TrainDoorSwitch
   doorIndex: 0
   opensDoor: 0
@@ -39507,11 +39508,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2972586363496237237, guid: 8c39e19aaf0f90745848273ffe7ed14d, type: 3}
       propertyPath: m_LocalPosition.y
-      value: -4.856
+      value: -4.224
       objectReference: {fileID: 0}
     - target: {fileID: 2972586363496237237, guid: 8c39e19aaf0f90745848273ffe7ed14d, type: 3}
       propertyPath: m_LocalPosition.z
-      value: 3.932
+      value: 3.946
       objectReference: {fileID: 0}
     - target: {fileID: 4969098829211467621, guid: 8c39e19aaf0f90745848273ffe7ed14d, type: 3}
       propertyPath: m_LocalPosition.x
@@ -44887,7 +44888,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a09ce10e0c6e2e54ea9dbfa7c3c6911a, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TreadmillScenery
   despawnZ: -16
   totalTrackLength: 128
@@ -45452,7 +45453,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 408605a8fc400c446b24b16678b930da, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::StartingRailYard
 --- !u!1 &1311166486 stripped
 GameObject:
@@ -48250,7 +48251,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a09ce10e0c6e2e54ea9dbfa7c3c6911a, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TreadmillScenery
   despawnZ: -16
   totalTrackLength: 128
@@ -55993,7 +55994,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 69caa44cb58957a4d83e63a692df0f80, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ConsoleInteractable
   consoleType: 2
   interactDistance: 2
@@ -59058,7 +59059,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a09ce10e0c6e2e54ea9dbfa7c3c6911a, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TreadmillScenery
   despawnZ: -16
   totalTrackLength: 128

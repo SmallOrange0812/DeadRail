@@ -9,6 +9,16 @@ public class ConsoleInteractable : MonoBehaviour
     [Tooltip("상호작용 가능한 최대 거리 (미터)")]
     public float interactDistance = 2.5f;
 
+    private void Awake()
+    {
+        if (consoleType != ConsoleType.P4_RadarConsole) return;
+        foreach (Renderer part in GetComponentsInChildren<Renderer>(true))
+        {
+            if (part.name == "Radar_Grid_Line" || part.name.StartsWith("Radar_Grid_Line."))
+                part.enabled = false;
+        }
+    }
+
     public string DisplayName => consoleType switch
     {
         ConsoleType.P1_DriveCinsole => "P1 기관실 속도 제어 콘솔",
@@ -67,6 +77,11 @@ public class ConsoleInteractable : MonoBehaviour
     private static bool IsAimSurface(Collider collider, PlayerMovement player)
     {
         return !collider.transform.IsChildOf(player.transform) &&
-            (!collider.isTrigger || collider.GetComponentInParent<ConsoleInteractable>() != null);
+            (!collider.isTrigger || collider.GetComponentInParent<ConsoleInteractable>() != null ||
+                IsLadderPart(collider.name));
     }
+
+    internal static bool IsLadderPart(string name) =>
+        name == "Roof_Access_Ladder" || name.StartsWith("Roof_Access_Ladder.") ||
+        name == "Ladder_Rung" || name.StartsWith("Ladder_Rung.");
 }

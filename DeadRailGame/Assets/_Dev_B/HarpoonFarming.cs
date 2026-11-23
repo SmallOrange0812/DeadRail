@@ -280,13 +280,15 @@ public class HarpoonFarming : NetworkBehaviour
     private void OnGUI()
     {
         if (Object == null || !Object.IsValid || playerMovement == null || !playerMovement.IsLocalPlayer) return;
+        if (!TryGetComponent(out EquipmentPivotController equipment) ||
+            equipment.CurrentMode != EquipmentPivotController.EquipmentMode.P3_HarpoonMount) return;
 
         float x = Screen.width / 2f;
         float y = Screen.height / 2f;
         float size = 14f;
         float thickness = 2f;
 
-        GUI.color = hasHarpoon ? Color.cyan : Color.white;
+        GUI.color = Color.cyan;
 
         // ✅ 오류 수정: 줄바꿈으로 끊어졌던 코드 한 줄로 복구
         GUI.DrawTexture(new Rect(x - size / 2f, y - thickness / 2f, size, thickness), Texture2D.whiteTexture);

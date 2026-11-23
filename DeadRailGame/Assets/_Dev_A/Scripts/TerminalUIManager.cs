@@ -13,6 +13,7 @@ public class TerminalUIManager : MonoBehaviour
     private ConsoleInteractable _aimedConsole;
     private TrainDoorSwitch _aimedDoorSwitch;
     private AimOutline _aimOutline;
+    private string _equipmentPrompt;
     private bool _isUiOpen;
     private bool _inventoryOpen;
     private int _openedFrame;
@@ -66,21 +67,35 @@ public class TerminalUIManager : MonoBehaviour
     {
         _aimedConsole = null;
         _aimedDoorSwitch = null;
-        if (!_isUiOpen && CanOpenUi() && ConsoleInteractable.TryGetAimedHit(_localPlayer, out RaycastHit hit))
+        _equipmentPrompt = null;
+        Transform equipmentOutline = null;
+        if (!_isUiOpen && CanOpenUi(allowActiveEquipment: true) &&
+            RailRouteLoop.CanReachTrainInterior(_localPlayer.transform.position))
         {
-            _aimedConsole = ConsoleInteractable.GetConsoleFromHit(_localPlayer, hit);
-            TrainDoorSwitch button = hit.collider.GetComponent<TrainDoorSwitch>();
-            if (button != null && button.IsInReach(_localPlayer.transform.position))
-                _aimedDoorSwitch = button;
+            _localPlayer.TryGetComponent(out EquipmentPivotController equipment);
+            if ((equipment == null || equipment.CurrentMode == EquipmentPivotController.EquipmentMode.None) &&
+                ConsoleInteractable.TryGetAimedHit(_localPlayer, out RaycastHit hit))
+            {
+                _aimedConsole = ConsoleInteractable.GetConsoleFromHit(_localPlayer, hit);
+                TrainDoorSwitch button = hit.collider.GetComponent<TrainDoorSwitch>();
+                if (button != null && button.IsInReach(_localPlayer.transform.position))
+                    _aimedDoorSwitch = button;
+            }
+            if (_aimedConsole == null && _aimedDoorSwitch == null && equipment != null)
+                _equipmentPrompt = equipment.GetEquipmentPrompt(out equipmentOutline);
+            if (_aimedConsole == null && _aimedDoorSwitch == null && _equipmentPrompt == null &&
+                ManualCrankGenerator.Instance != null)
+                _equipmentPrompt = ManualCrankGenerator.Instance.GetInteractionPrompt(_localPlayer, out equipmentOutline);
         }
-        _aimOutline?.Show(_aimedDoorSwitch != null ? _aimedDoorSwitch.transform : _aimedConsole?.transform,
+        _aimOutline?.Show(_aimedDoorSwitch != null ? _aimedDoorSwitch.transform : _aimedConsole?.transform ?? equipmentOutline,
             _aimedDoorSwitch == null);
     }
 
     internal bool TryInteractWithAimedTarget(PlayerMovement player, out bool useSearchlight)
     {
         useSearchlight = false;
-        if (_isUiOpen || !CanOpenUi() || player != _localPlayer)
+        if (_isUiOpen || !CanOpenUi() || player != _localPlayer ||
+            !RailRouteLoop.CanReachTrainInterior(player.transform.position))
             return false;
         if (_aimedDoorSwitch != null && _aimedDoorSwitch.IsInReach(player.transform.position))
         {
@@ -127,7 +142,7 @@ public class TerminalUIManager : MonoBehaviour
         _ => null
     };
 
-    private bool CanOpenUi()
+    private bool CanOpenUi(bool allowActiveEquipment = false)
     {
         RailRouteLoop route = RailRouteLoop.Instance;
         if (route != null && route.Ready && route.IsTransition) return false;
@@ -143,10 +158,10 @@ public class TerminalUIManager : MonoBehaviour
         }
 
         if (_localPlayer == null || _localPlayer.Object == null || !_localPlayer.Object.IsValid
-            || _localPlayer.IsClimbingLadder || (_localPlayer.isUsingTerminal && !_isUiOpen))
+            || (!allowActiveEquipment && _localPlayer.IsClimbingLadder) || (_localPlayer.isUsingTerminal && !_isUiOpen))
             return false;
 
-        return !_localPlayer.TryGetComponent(out EquipmentPivotController equipment)
+        return allowActiveEquipment || !_localPlayer.TryGetComponent(out EquipmentPivotController equipment)
             || equipment.CurrentMode == EquipmentPivotController.EquipmentMode.None;
     }
 
@@ -179,6 +194,7 @@ public class TerminalUIManager : MonoBehaviour
             if (_aimedDoorSwitch != null) DrawInteractionPrompt(_aimedDoorSwitch.Prompt);
             else if (_aimedConsole != null)
                 DrawInteractionPrompt($"[E]  {_aimedConsole.DisplayName}");
+            else DrawInteractionPrompt(_equipmentPrompt);
         }
     }
 

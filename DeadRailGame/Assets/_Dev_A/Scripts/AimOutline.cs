@@ -29,6 +29,20 @@ internal sealed class AimOutline
             MeshFilter[] sources = includeChildren
                 ? target.GetComponentsInChildren<MeshFilter>()
                 : target.GetComponents<MeshFilter>();
+            if (includeChildren && target.parent != null &&
+                (target.name == "Roof_Access_Ladder" || target.name.StartsWith("Roof_Access_Ladder.")))
+            {
+                // The train model imports rails and rungs as sibling meshes.
+                var ladderParts = new List<MeshFilter>();
+                foreach (Transform part in target.parent)
+                {
+                    string name = part.name;
+                    if (name == "Roof_Access_Ladder" || name.StartsWith("Roof_Access_Ladder.") ||
+                        name == "Ladder_Rung" || name.StartsWith("Ladder_Rung."))
+                        ladderParts.AddRange(part.GetComponentsInChildren<MeshFilter>());
+                }
+                sources = ladderParts.ToArray();
+            }
             var outlines = new List<Renderer>(sources.Length);
             foreach (MeshFilter source in sources)
             {

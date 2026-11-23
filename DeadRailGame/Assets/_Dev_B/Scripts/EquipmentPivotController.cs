@@ -10,6 +10,7 @@ public class EquipmentPivotController : NetworkBehaviour
 
     [Header("현재 잡고 있는 장비 모드")]
     [Networked] public EquipmentMode CurrentMode { get; set; } = EquipmentMode.None;
+    [Networked] private float HarpoonRestYaw { get; set; }
 
     [Header("탐조등 모드 시점 전환")]
     public bool isSearchlightFirstPerson = false;
@@ -18,6 +19,8 @@ public class EquipmentPivotController : NetworkBehaviour
     private PlayerMovement _playerMovement;
     private HarpoonFarming _harpoonFarming;
     private Rig _bodyRig;
+    private bool _usingHeavyWalk;
+    private float _normalAnimationSpeed;
     private Animator _animator;
 
     [Header("UI 조준점 (직접 연결 - 비워두면 검은 박스 안 뜸!)")]
@@ -53,7 +56,6 @@ public class EquipmentPivotController : NetworkBehaviour
     public float interactDistance = 2.5f;
     [SerializeField] private float ladderInteractDistance = 1.5f;
     [SerializeField] private float harpoonInteractDistance = 1.5f;
-    private GUIStyle _interactionPromptStyle;
     private enum InteractionTarget { None, Ladder, Searchlight, Harpoon }
 
     [Header("회전축 및 총구 방향 보정")]
@@ -76,8 +78,6 @@ public class EquipmentPivotController : NetworkBehaviour
     private Quaternion _initWeaponPitch;
     private bool _initialized = false;
     private EquipmentMode _previousMode = EquipmentMode.None;
-    private Quaternion _harpoonRightHandViewOffset = Quaternion.identity;
-    private bool _hasHarpoonRightHandViewOffset;
     private bool _isCrankPoseActive;
     private Transform _crankHandle;
     private Vector3 _crankLeftGripLocalPosition;
@@ -257,6 +257,17 @@ public class EquipmentPivotController : NetworkBehaviour
             generated.SetParent(weaponAimPivot, false);
         }
 
+        if (weaponStock != null && weaponBarrel != null)
+        {
+            Vector3 barrelCenter = GetVisualCenter(weaponBarrel);
+            Vector3 forward = (barrelCenter - GetVisualCenter(weaponStock)).normalized;
+            if (forward.sqrMagnitude > 0f)
+            {
+                generated.position = barrelCenter + forward * GetProjectedVisualExtent(weaponBarrel, forward);
+                return generated;
+            }
+        }
+
         if (!TryGetWeaponLocalBounds(out Bounds localBounds))
             return generated;
 
@@ -380,7 +391,15 @@ public class EquipmentPivotController : NetworkBehaviour
         nearestDistance = float.PositiveInfinity;
         InteractionTarget target = InteractionTarget.None;
 
-        if (GetNearestLadder(out Bounds ladderBounds) != null)
+        Transform ladder = GetNearestLadder(out Bounds ladderBounds);
+        bool nearWeapon = IsNearWeaponMount();
+        if ((ladder == null && !nearWeapon) ||
+            !ConsoleInteractable.TryGetAimedHit(_playerMovement, out RaycastHit hit))
+            return target;
+
+        if (ladder != null &&
+            hit.collider.transform.parent == ladder.parent &&
+            ConsoleInteractable.IsLadderPart(hit.collider.name))
         {
             float distance = Vector3.Distance(transform.position, ladderBounds.ClosestPoint(transform.position));
             if (distance < nearestDistance)
@@ -390,7 +409,9 @@ public class EquipmentPivotController : NetworkBehaviour
             }
         }
 
-        if (IsNearWeaponMount())
+        Transform mount = weaponRootYaw != null ? weaponRootYaw : weaponAimPivot;
+        if (nearWeapon && mount != null &&
+            (hit.collider.transform == mount || hit.collider.transform.IsChildOf(mount)))
         {
             float distance = GetWeaponMountDistance();
             if (distance < nearestDistance)
@@ -405,7 +426,8 @@ public class EquipmentPivotController : NetworkBehaviour
 
     private bool IsEquipmentInteractionTarget(InteractionTarget target)
     {
-        return GetNearestInteractionTarget(out _) == target &&
+        return RailRouteLoop.CanReachTrainInterior(transform.position) &&
+               GetNearestInteractionTarget(out _) == target &&
                !ConsoleInteractable.IsConsoleNearestInteraction(_playerMovement);
     }
 
@@ -446,6 +468,21 @@ public class EquipmentPivotController : NetworkBehaviour
         Transform ladder = GetNearestLadder(out Bounds bounds);
         if (ladder == null) return false;
 
+        Bounds rungBounds = default;
+        bool hasRungs = false;
+        if (ladder.parent != null)
+        {
+            foreach (Transform part in ladder.parent)
+            {
+                if (part.name != "Ladder_Rung" && !part.name.StartsWith("Ladder_Rung.")) continue;
+                if (!TryGetRendererBounds(part, out Bounds rung)) continue;
+                if (hasRungs) rungBounds.Encapsulate(rung);
+                else rungBounds = rung;
+                hasRungs = true;
+            }
+        }
+        Vector3 climbCenter = hasRungs ? rungBounds.center : bounds.center;
+
         Transform trainRoot = ladder;
         while (trainRoot.parent != null && trainRoot.name != "Train")
             trainRoot = trainRoot.parent;
@@ -460,11 +497,18 @@ public class EquipmentPivotController : NetworkBehaviour
             trainCenter = trainBounds.center;
         }
 
-        Vector3 inward = trainCenter - bounds.center;
+        Vector3 inward = trainCenter - climbCenter;
         inward.y = 0f;
+        if (roofAccessLadder != null && _alternateRoofAccessLadder != null &&
+            roofAccessLadder.parent == ladder.parent && _alternateRoofAccessLadder.parent == ladder.parent)
+        {
+            Vector3 across = Vector3.ProjectOnPlane(_alternateRoofAccessLadder.position - roofAccessLadder.position, Vector3.up);
+            if (across.sqrMagnitude > 0.001f)
+                inward = Vector3.ProjectOnPlane(inward, across.normalized);
+        }
         if (inward.sqrMagnitude > 0.001f) inward.Normalize();
 
-        Vector3 ladderCenterLocal = trainRoot.InverseTransformPoint(bounds.center);
+        Vector3 ladderCenterLocal = trainRoot.InverseTransformPoint(climbCenter);
         Vector3 inwardLocal = trainRoot.InverseTransformVector(inward);
         inwardLocal.y = 0f;
         if (inwardLocal.sqrMagnitude > 0.001f) inwardLocal.Normalize();
@@ -573,7 +617,7 @@ public class EquipmentPivotController : NetworkBehaviour
         if (CurrentMode != mode)
         {
             if (mode == EquipmentMode.P2_Searchlight && !IsNearSearchlightControl()) return false;
-            if (mode == EquipmentMode.P3_HarpoonMount && !IsNearWeaponMount()) return false;
+            if (mode == EquipmentMode.P3_HarpoonMount && (!IsNearWeaponMount() || !TryAlignHarpoonView())) return false;
         }
 
         CurrentMode = CurrentMode == mode ? EquipmentMode.None : mode;
@@ -583,90 +627,111 @@ public class EquipmentPivotController : NetworkBehaviour
         return true;
     }
 
-    private void OnGUI()
+    private bool TryAlignHarpoonView()
     {
-        if (_playerMovement == null || !_playerMovement.IsLocalPlayer)
-            return;
+        Transform stock = weaponStock != null ? weaponStock : weaponGrip;
+        Transform barrel = weaponBarrel != null ? weaponBarrel : weaponMuzzle;
+        if (stock == null || barrel == null || _playerMovement == null)
+            return false;
 
-        if (CurrentMode == EquipmentMode.None &&
-            ConsoleInteractable.IsConsoleNearestInteraction(_playerMovement))
-            return;
+        if (weaponRootYaw != null) weaponRootYaw.localRotation = _initWeaponYaw;
+        if (weaponAimPivot != null) weaponAimPivot.localRotation = _initWeaponPitch;
+        Vector3 barrelForward = Vector3.ProjectOnPlane(GetVisualCenter(barrel) - GetVisualCenter(stock), Vector3.up);
+        if (barrelForward.sqrMagnitude < 0.001f)
+            return false;
 
-        string prompt;
-        if (_playerMovement.IsClimbingLadder)
-        {
-            prompt = "[W] 오르기  [S] 내려가기  [E] 사다리 놓기";
-        }
-        else if (CurrentMode == EquipmentMode.P2_Searchlight && IsNearSearchlightControl())
-        {
-            prompt = $"[E] 나가기  [F] 탐조등 {(IsSearchlightOn ? "끄기" : "켜기")}";
-        }
-        else if (CurrentMode == EquipmentMode.P3_HarpoonMount && IsNearWeaponMount())
-        {
-            prompt = "[E] 작살에서 나가기";
-        }
-        else if (CurrentMode != EquipmentMode.None)
-        {
-            return;
-        }
-        else if (GetNearestInteractionTarget(out _) == InteractionTarget.Ladder)
-        {
-            prompt = "[E] 키를 눌러 사다리 잡기";
-        }
-        else if (GetNearestInteractionTarget(out _) == InteractionTarget.Harpoon)
-        {
-            prompt = "[E] 키를 눌러 P3 거치형 작살 사용";
-        }
-        else
-        {
-            return;
-        }
+        Vector3 trainForward = searchlightYawPivot != null
+            ? Vector3.ProjectOnPlane(searchlightYawPivot.position - stock.position, Vector3.up)
+            : Vector3.forward;
+        if (trainForward.sqrMagnitude < 0.001f)
+            trainForward = Vector3.forward;
 
-        if (_interactionPromptStyle == null)
+        HarpoonRestYaw = Quaternion.LookRotation(barrelForward, Vector3.up).eulerAngles.y;
+        transform.rotation = Quaternion.LookRotation(trainForward, Vector3.up);
+        _playerMovement.CameraPitch = 0f;
+        return true;
+    }
+
+    internal string GetEquipmentPrompt(out Transform outlineTarget)
+    {
+        outlineTarget = null;
+        if (_playerMovement == null || !_playerMovement.IsLocalPlayer) return null;
+        if (_playerMovement.IsClimbingLadder) return "[W] 오르기  [S] 내려가기  [E] 사다리 놓기";
+        if (CurrentMode == EquipmentMode.P2_Searchlight && IsNearSearchlightControl())
+            return $"[E] 나가기  [F] 탐조등 {(IsSearchlightOn ? "끄기" : "켜기")}";
+        if (CurrentMode == EquipmentMode.P3_HarpoonMount) return "[E] 작살에서 나가기";
+        if (CurrentMode != EquipmentMode.None) return null;
+
+        switch (GetNearestInteractionTarget(out _))
         {
-            _interactionPromptStyle = new GUIStyle(GUI.skin.label)
-            {
-                fontSize = 24,
-                fontStyle = FontStyle.Bold,
-                alignment = TextAnchor.MiddleCenter
-            };
-            _interactionPromptStyle.normal.textColor = new Color(0.2f, 1f, 0.4f);
+            case InteractionTarget.Ladder:
+                outlineTarget = GetNearestLadder(out _);
+                if (outlineTarget != null && roofAccessLadder != null &&
+                    outlineTarget.parent == roofAccessLadder.parent)
+                    outlineTarget = roofAccessLadder;
+                return "[E]  사다리 잡기";
+            case InteractionTarget.Harpoon:
+                outlineTarget = weaponRootYaw != null ? weaponRootYaw : weaponAimPivot;
+                return "[E]  P3 거치형 작살 사용";
+            default:
+                return null;
         }
-
-        const float width = 500f;
-        const float height = 50f;
-        var rect = new Rect((Screen.width - width) / 2f, Screen.height * 0.75f, width, height);
-
-        GUI.color = Color.black;
-        GUI.Label(new Rect(rect.x + 2f, rect.y + 2f, rect.width, rect.height), prompt, _interactionPromptStyle);
-        GUI.color = Color.white;
-        GUI.Label(rect, prompt, _interactionPromptStyle);
     }
 
     private void LateUpdate()
     {
         if (!_initialized || _playerMovement == null) return;
 
-        // Capture the wrist's current pose once on each peer when harpoon mode
-        // begins. Reusing this view-relative rotation prevents the generic
-        // barrel LookRotation from twisting the hand sideways, while still
-        // letting the wrist follow subsequent player view movement.
-        if (CurrentMode == EquipmentMode.P3_HarpoonMount &&
-            _previousMode != EquipmentMode.P3_HarpoonMount)
-        {
-            CaptureHarpoonRightHandViewOffset();
-        }
-        else if (CurrentMode != EquipmentMode.P3_HarpoonMount)
-        {
-            _hasHarpoonRightHandViewOffset = false;
-        }
         if (_previousMode == EquipmentMode.P2_Searchlight && CurrentMode != EquipmentMode.P2_Searchlight && searchlightLamp != null)
             searchlightLamp.enabled = false;
         _previousMode = CurrentMode;
 
         ApplyModeSettings();
 
-        if (CurrentMode == EquipmentMode.None && !_isCrankPoseActive)
+        if (_isCrankPoseActive)
+        {
+            if (_bodyRig != null) _bodyRig.weight = 1f;
+            if (_animator != null && _animator.layerCount > 1)
+                _animator.SetLayerWeight(1, 0f);
+            if (lookTarget != null && _crankHandle != null)
+                lookTarget.position = _crankHandle.position;
+            UpdateCrankHandTarget();
+            return;
+        }
+
+        bool heavyWalk = CurrentMode == EquipmentMode.None && _playerMovement.IsCarryingHeavyBattery;
+        if (_animator != null && heavyWalk != _usingHeavyWalk)
+        {
+            if (heavyWalk) _normalAnimationSpeed = _animator.speed;
+            _animator.speed = heavyWalk ? _normalAnimationSpeed * 0.65f : _normalAnimationSpeed;
+            _usingHeavyWalk = heavyWalk;
+        }
+
+        if (heavyWalk)
+        {
+            if (_bodyRig != null) _bodyRig.weight = 1f;
+            if (_animator != null && _animator.layerCount > 1) _animator.SetLayerWeight(1, 0f);
+            Vector3 center = RailRouteLoop.GetBatteryCarryPosition(transform);
+            Vector3 grip = center - transform.forward * 0.12f - Vector3.up * 0.10f;
+            Vector3 leftGrip = grip - transform.right * 0.20f;
+            Vector3 rightGrip = grip + transform.right * 0.20f;
+            PlayerRef carrier = Runner.GameMode == GameMode.Shared ? Object.StateAuthority : Object.InputAuthority;
+            if (RailRouteLoop.Instance.TryGetBatteryHandleGrips(carrier, transform, out Vector3 handleLeft, out Vector3 handleRight))
+            {
+                leftGrip = handleLeft;
+                rightGrip = handleRight;
+            }
+            if (leftHandTarget != null)
+                leftHandTarget.SetPositionAndRotation(leftGrip,
+                    transform.rotation * Quaternion.Euler(leftHandRotOffset));
+            if (rightHandTarget != null)
+                rightHandTarget.SetPositionAndRotation(rightGrip,
+                    transform.rotation * Quaternion.Euler(rightHandRotOffset));
+            if (lookTarget != null) lookTarget.position = transform.position + transform.forward * 5f + Vector3.up * 1.2f;
+            return;
+        }
+
+        if (CurrentMode == EquipmentMode.None)
         {
             if (_bodyRig != null) _bodyRig.weight = 0f;
 
@@ -675,26 +740,11 @@ public class EquipmentPivotController : NetworkBehaviour
 
             return;
         }
-        else if (CurrentMode == EquipmentMode.None && _isCrankPoseActive)
-        {
-            if (_bodyRig != null) _bodyRig.weight = 1f;
-            if (_animator != null && _animator.layerCount > 1)
-                _animator.SetLayerWeight(1, 0f);
-
-            UpdateCrankHandTarget();
-            return;
-        }
         else
         {
             if (_animator != null && _animator.layerCount > 1)
                 _animator.SetLayerWeight(1, 1f);
         }
-
-        float yaw = transform.eulerAngles.y;
-        float pitch = _playerMovement.CameraPitch;
-
-        if (invertYaw) yaw = -yaw;
-        if (invertPitch) pitch = -pitch;
 
         if (CurrentMode == EquipmentMode.P2_Searchlight)
         {
@@ -721,13 +771,23 @@ public class EquipmentPivotController : NetworkBehaviour
         }
         else if (CurrentMode == EquipmentMode.P3_HarpoonMount)
         {
-            float finalWeaponYaw = yaw + weaponYawOffset;
-
+            float finalWeaponYaw = Mathf.DeltaAngle(HarpoonRestYaw, transform.eulerAngles.y);
             if (weaponRootYaw != null)
-                weaponRootYaw.localRotation = _initWeaponYaw * Quaternion.Euler(yawAxis * finalWeaponYaw);
+            {
+                Vector3 upInParent = weaponRootYaw.parent != null
+                    ? weaponRootYaw.parent.InverseTransformDirection(Vector3.up)
+                    : Vector3.up;
+                weaponRootYaw.localRotation = Quaternion.AngleAxis(finalWeaponYaw, upInParent) * _initWeaponYaw;
+            }
 
             if (weaponAimPivot != null)
-                weaponAimPivot.localRotation = _initWeaponPitch * Quaternion.Euler(pitchAxis * pitch);
+            {
+                Vector3 rightInParent = weaponAimPivot.parent != null
+                    ? weaponAimPivot.parent.InverseTransformDirection(transform.right)
+                    : transform.right;
+                weaponAimPivot.localRotation =
+                    Quaternion.AngleAxis(_playerMovement.CameraPitch, rightInParent) * _initWeaponPitch;
+            }
 
             // In the current train model Weapon_Grip is the round side pivot at
             // the mount, not the point where a player should hold the launcher.
@@ -742,8 +802,9 @@ public class EquipmentPivotController : NetworkBehaviour
                 // so a second root-to-stock distance gate turns IK off mid-use.
                 if (_bodyRig != null) _bodyRig.weight = 1f;
 
+                Vector3 stockCenter = GetVisualCenter(rearHandAnchor);
                 Vector3 barrelDirection = weaponBarrel != null
-                    ? weaponBarrel.position - rearHandAnchor.position
+                    ? GetVisualCenter(weaponBarrel) - stockCenter
                     : weaponMuzzle != null
                         ? weaponMuzzle.position - rearHandAnchor.position
                         : weaponAimPivot != null
@@ -753,34 +814,27 @@ public class EquipmentPivotController : NetworkBehaviour
                     barrelDirection = rearHandAnchor.forward;
                 barrelDirection.Normalize();
 
-                // Put the trigger hand on the rear grip. Place the support hand
-                // partway toward the barrel instead of beside the launcher.
-                // Weapon_Stock is a block-shaped rear stock. Its pivot/center
-                // places the wrist inside the stock, which makes the hand look
-                // like it is grabbing the side. Place the trigger hand at the
-                // rear-facing surface instead, measured along the actual barrel
-                // axis (renderer bounds are world-space and remain valid when
-                // the mounted weapon is rotated).
-                Vector3 stockCenter = GetVisualCenter(rearHandAnchor);
+                Quaternion gripRotation = Quaternion.LookRotation(barrelDirection, Vector3.up);
+                Vector3 gripRight = gripRotation * Vector3.right;
+                Vector3 gripUp = gripRotation * Vector3.up;
                 float stockHalfLength = GetProjectedVisualExtent(rearHandAnchor, barrelDirection);
-                Vector3 gripPoint = stockCenter
-                    - barrelDirection * Mathf.Max(0f, stockHalfLength - 0.04f)
+                Vector3 rearGrip = stockCenter - barrelDirection * (stockHalfLength + 0.04f)
+                    - gripUp * 0.10f + gripRight * Mathf.Max(0.10f, handSpread)
                     + rearHandAnchor.TransformDirection(gripPositionOffset);
-                Vector3 handUp = weaponAimPivot != null ? weaponAimPivot.up : transform.up;
-                Quaternion gripRotation = Quaternion.LookRotation(barrelDirection, handUp);
-                Transform supportReference = weaponBarrel != null ? weaponBarrel : weaponMuzzle;
-                float supportHandOffset = supportReference != null
-                    ? Mathf.Clamp(Vector3.Distance(gripPoint, supportReference.position) * 0.45f, 0.22f, 0.55f)
-                    : Mathf.Max(handSpread, 0.22f);
+                Vector3 supportCenter = weaponBarrel != null
+                    ? Vector3.Lerp(stockCenter, GetVisualCenter(weaponBarrel), 0.65f)
+                    : stockCenter + barrelDirection * 0.28f;
+                Vector3 supportGrip = supportCenter - gripUp * 0.13f
+                    - gripRight * Mathf.Max(0.10f, handSpread);
 
                 if (leftHandTarget != null)
                     leftHandTarget.SetPositionAndRotation(
-                        gripPoint + barrelDirection * supportHandOffset,
+                        supportGrip,
                         gripRotation * Quaternion.Euler(leftHandRotOffset));
                 if (rightHandTarget != null)
                     rightHandTarget.SetPositionAndRotation(
-                        gripPoint,
-                        GetHarpoonRightHandRotation());
+                        rearGrip,
+                        gripRotation * Quaternion.Euler(rightHandRotOffset));
             }
         }
 
@@ -827,36 +881,6 @@ public class EquipmentPivotController : NetworkBehaviour
         axis.Normalize();
         Vector3 e = bounds.extents;
         return Mathf.Abs(axis.x) * e.x + Mathf.Abs(axis.y) * e.y + Mathf.Abs(axis.z) * e.z;
-    }
-
-    private void CaptureHarpoonRightHandViewOffset()
-    {
-        if (_animator == null || rightHandTarget == null)
-        {
-            _hasHarpoonRightHandViewOffset = false;
-            return;
-        }
-
-        Transform handBone = _animator.GetBoneTransform(HumanBodyBones.RightHand);
-        Quaternion viewRotation = GetPlayerViewRotation();
-        Quaternion handRotation = handBone != null ? handBone.rotation : rightHandTarget.rotation;
-        _harpoonRightHandViewOffset = Quaternion.Inverse(viewRotation) * handRotation;
-        _hasHarpoonRightHandViewOffset = true;
-    }
-
-    private Quaternion GetHarpoonRightHandRotation()
-    {
-        Quaternion viewRotation = GetPlayerViewRotation();
-        Quaternion handRotation = _hasHarpoonRightHandViewOffset
-            ? viewRotation * _harpoonRightHandViewOffset
-            : viewRotation;
-        return handRotation * Quaternion.Euler(rightHandRotOffset);
-    }
-
-    private Quaternion GetPlayerViewRotation()
-    {
-        float pitch = _playerMovement != null ? _playerMovement.CameraPitch : 0f;
-        return transform.rotation * Quaternion.Euler(pitch, 0f, 0f);
     }
 
     public void BeginCrankPose(Transform handle, Vector3 gripWorldPosition)

@@ -12,6 +12,10 @@ public struct PlayerControlInput : INetworkInput
 
 public class PlayerMovement : NetworkBehaviour
 {
+    internal bool IsCarryingHeavyBattery =>
+        Object != null && Object.IsValid && Runner != null && RailRouteLoop.Instance != null &&
+        RailRouteLoop.Instance.IsCarryingBattery(Runner.GameMode == GameMode.Shared
+            ? Object.StateAuthority : Object.InputAuthority);
     public bool IsLocalPlayer =>
         Runner.GameMode == GameMode.Shared 
         ? HasStateAuthority 
@@ -160,20 +164,40 @@ public class PlayerMovement : NetworkBehaviour
             || topLocalY <= bottomLocalY)
             return false;
 
+        float playerLocalY = movingReference.InverseTransformPoint(transform.position).y;
+        bool startingAtTop = playerLocalY > (bottomLocalY + topLocalY) * 0.5f;
+        Vector3 climbLine = ladderCenterLocal + inwardLocal * 0.45f;
+        Vector3 landing = climbLine + inwardLocal * 0.65f;
+        landing.y = bottomLocalY;
+        Vector3 landingWorld = movingReference.TransformPoint(landing);
+        float nearestFloor = float.PositiveInfinity;
+        foreach (RaycastHit hit in Physics.RaycastAll(landingWorld + Vector3.up, Vector3.down, 2f,
+            Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
+        {
+            if (hit.distance >= nearestFloor || hit.normal.y < 0.65f ||
+                !hit.collider.transform.IsChildOf(movingReference))
+                continue;
+            nearestFloor = hit.distance;
+            Vector3 feetToRoot = transform.TransformVector(
+                Vector3.up * (_controller.height * 0.5f - _controller.center.y));
+            bottomLocalY = Mathf.Max(bottomLocalY,
+                movingReference.InverseTransformPoint(hit.point + feetToRoot + Vector3.up * 0.03f).y);
+        }
+        if (!startingAtTop) bottomLocalY = Mathf.Max(bottomLocalY, playerLocalY);
+        if (bottomLocalY >= topLocalY) return false;
+
         _ladderClimbReference = movingReference;
         _ladderClimbInwardLocal = inwardLocal;
         _ladderBottomLocalY = bottomLocalY;
         _ladderTopLocalY = topLocalY;
 
-        float playerLocalY = movingReference.InverseTransformPoint(transform.position).y;
         // inwardLocal points toward the train body. Keep the player on that
         // side of the ladder throughout the climb instead of placing them outside.
-        _ladderClimbLocalPosition = ladderCenterLocal + inwardLocal * 0.45f;
+        _ladderClimbLocalPosition = climbLine;
 
         // Attach at the end of the ladder nearest the player's current level:
         // climb up from the bottom, or start descending from the roof at the top.
         const float endRungOffset = 0.15f;
-        bool startingAtTop = playerLocalY > (bottomLocalY + topLocalY) * 0.5f;
         _ladderClimbLocalPosition.y = startingAtTop
             ? Mathf.Clamp(topLocalY - endRungOffset, bottomLocalY, topLocalY)
             : Mathf.Clamp(bottomLocalY + endRungOffset, bottomLocalY, topLocalY);
@@ -247,7 +271,8 @@ public class PlayerMovement : NetworkBehaviour
 
         if (fpsCamera != null)
         {
-            fpsCamera.fieldOfView = Mathf.Lerp(fpsCamera.fieldOfView, _targetFOV, Time.deltaTime * zoomSpeed);
+            float viewFov = IsCarryingHeavyBattery ? Mathf.Max(_targetFOV, normalFOV + 6f) : _targetFOV;
+            fpsCamera.fieldOfView = Mathf.Lerp(fpsCamera.fieldOfView, viewFov, Time.deltaTime * zoomSpeed);
 
             if (CameraOverrideTarget != null)
             {
@@ -275,7 +300,8 @@ public class PlayerMovement : NetworkBehaviour
 
         float zoomRatio = fpsCamera != null ? fpsCamera.fieldOfView / normalFOV : 1f;
         float sensitivity = mouseSensitivity * Mathf.Clamp(zoomRatio, 0.35f, 1f);
-        bool interactPressed = Input.GetKeyDown(KeyCode.E);
+        bool interactPressed = Input.GetKeyDown(KeyCode.E) &&
+            ManualCrankGenerator.Instance?.ClosedThisFrame != true;
         bool searchlightPressed = false;
         if (interactPressed && TerminalUIManager.Instance != null && TerminalUIManager.Instance.TryInteractWithAimedTarget(this, out searchlightPressed))
         {
@@ -353,7 +379,7 @@ public class PlayerMovement : NetworkBehaviour
 
         Vector3 move = transform.right * controls.Move.x
                      + transform.forward * controls.Move.y;
-        Vector3 velocity = move.normalized * moveSpeed;
+        Vector3 velocity = move.normalized * moveSpeed * (IsCarryingHeavyBattery ? 0.60f : 1f);
 
         if (controls.JumpPressed && _controller.isGrounded)
         {

@@ -109,6 +109,14 @@ public sealed class TrainWalkableColliderBuilder : MonoBehaviour
             float secondLargest = size.x + size.y + size.z - largest - Mathf.Min(size.x, Mathf.Min(size.y, size.z));
             if (largest < minimumColliderFootprint || secondLargest < minimumColliderFootprint)
             {
+                if (ConsoleInteractable.IsLadderPart(filter.name))
+                {
+                    Bounds meshBounds = mesh.bounds;
+                    BoxCollider aimCollider = filter.gameObject.AddComponent<BoxCollider>();
+                    aimCollider.isTrigger = true;
+                    aimCollider.center = meshBounds.center;
+                    aimCollider.size = Vector3.Max(meshBounds.size, Vector3.one * 0.02f);
+                }
                 continue;
             }
 
