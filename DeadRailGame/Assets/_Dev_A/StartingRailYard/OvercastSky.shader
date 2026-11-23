@@ -47,6 +47,13 @@ Shader "DeadRail/Starting Rail Yard/Overcast Sky"
                 float2 cloudPlane = ray.xz * (2.4 / max(0.15, ray.y + 0.35));
                 float cloud = Noise(cloudPlane * float2(1.15, 0.7)) * 0.65 + Noise(cloudPlane * 2.35) * 0.35;
                 color += (cloud - 0.46) * 0.092 * smoothstep(0.005, 0.18, ray.y);
+                // Distant painted-style ridges in the sky material, behind the 3D city layers.
+                float2 horizonDirection = normalize(ray.xz + float2(0.0001, 0));
+                float ridgeHeight = 0.018 + Noise(horizonDirection * 6.3) * 0.033
+                    + Noise(horizonDirection * 17.0) * 0.014;
+                float ridge = (1.0 - smoothstep(ridgeHeight - 0.005, ridgeHeight + 0.005, ray.y))
+                    * smoothstep(-0.09, 0.005, ray.y);
+                color = lerp(color, float3(35, 43, 59) / 255.0, ridge * 0.72);
                 color = max(0, color);
                 #ifndef UNITY_COLORSPACE_GAMMA
                     color = SRGBToLinear(color);

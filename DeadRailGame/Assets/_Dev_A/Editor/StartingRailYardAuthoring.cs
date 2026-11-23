@@ -185,6 +185,7 @@ public static class StartingRailYardAuthoring
                 Section("Ballast weeds and debris", Debris);
                 Section(CitySection, Skyline);
 
+                DepotEnvironmentAuthoring.AttachBackdrop(root);
                 GameObject saved = PrefabUtility.SaveAsPrefabAsset(root, PrefabPath, out bool success);
                 if (!success) throw new IOException($"Could not save {PrefabPath}");
                 AssetDatabase.SaveAssets();
