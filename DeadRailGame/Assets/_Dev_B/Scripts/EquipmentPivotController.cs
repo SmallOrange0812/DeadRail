@@ -393,24 +393,24 @@ public class EquipmentPivotController : NetworkBehaviour
 
         Transform ladder = GetNearestLadder(out Bounds ladderBounds);
         bool nearWeapon = IsNearWeaponMount();
-        if ((ladder == null && !nearWeapon) ||
-            !ConsoleInteractable.TryGetAimedHit(_playerMovement, out RaycastHit hit))
-            return target;
+        if (ladder == null && !nearWeapon) return target;
+        bool hasHit = ConsoleInteractable.TryGetAimedHit(_playerMovement, out Ray ray, out RaycastHit hit);
+        if (ray.direction == Vector3.zero) return target;
 
-        if (ladder != null &&
-            hit.collider.transform.parent == ladder.parent &&
-            ConsoleInteractable.IsLadderPart(hit.collider.name))
+        if (ladder != null)
         {
-            float distance = Vector3.Distance(transform.position, ladderBounds.ClosestPoint(transform.position));
-            if (distance < nearestDistance)
+            Bounds aimArea = ladderBounds;
+            // Keep the existing reach distance; give the opening a small margin on each side.
+            aimArea.Expand(new Vector3(.20f, .12f, .20f));
+            if (aimArea.IntersectRay(ray, out float entry) && (!hasHit || entry <= hit.distance))
             {
-                nearestDistance = distance;
+                nearestDistance = Vector3.Distance(transform.position, ladderBounds.ClosestPoint(transform.position));
                 target = InteractionTarget.Ladder;
             }
         }
 
         Transform mount = weaponRootYaw != null ? weaponRootYaw : weaponAimPivot;
-        if (nearWeapon && _playerMovement.HasRole(TrainRole.Gunner) && mount != null &&
+        if (hasHit && nearWeapon && _playerMovement.HasRole(TrainRole.Gunner) && mount != null &&
             (hit.collider.transform == mount || hit.collider.transform.IsChildOf(mount)))
         {
             float distance = GetWeaponMountDistance();
@@ -433,6 +433,17 @@ public class EquipmentPivotController : NetworkBehaviour
 
     private Transform GetNearestLadder(out Bounds ladderBounds)
     {
+        // This train imports the two side rails as siblings, with the rungs between them.
+        if (roofAccessLadder != null && _alternateRoofAccessLadder != null &&
+            roofAccessLadder.parent == _alternateRoofAccessLadder.parent &&
+            TryGetRendererBounds(roofAccessLadder, out ladderBounds) &&
+            TryGetRendererBounds(_alternateRoofAccessLadder, out Bounds otherRail))
+        {
+            ladderBounds.Encapsulate(otherRail);
+            return ladderBounds.SqrDistance(transform.position) <= ladderInteractDistance * ladderInteractDistance
+                ? roofAccessLadder : null;
+        }
+
         Transform nearest = null;
         float nearestDistance = float.MaxValue;
         ladderBounds = default;

@@ -381,8 +381,10 @@ public class NetworkManager : MonoBehaviour
         if (!HasRunningSession || titleIndex < 0) return false;
 
         _leavingSession = true;
+        var screen = TitleReturnLoadingScreen.Show();
         try
         {
+            await Awaitable.NextFrameAsync();
             await _runner.Shutdown();
         }
         catch (System.Exception exception)
@@ -391,11 +393,12 @@ public class NetworkManager : MonoBehaviour
             if (_runner != null && _runner.IsRunning)
             {
                 _leavingSession = false;
+                if (screen != null) Destroy(screen.gameObject);
                 return false;
             }
         }
 
-        if (Application.isPlaying) await SceneManager.LoadSceneAsync(titleIndex);
+        if (Application.isPlaying) await screen.LoadTitle(titleIndex);
         return true;
     }
 
@@ -403,9 +406,11 @@ public class NetworkManager : MonoBehaviour
     {
         if (runner != _runner || _leavingSession) return;
         _leavingSession = true;
-        await Task.Yield();
         int titleIndex = SceneUtility.GetBuildIndexByScenePath(FrontendMenu.TitleScene);
-        if (Application.isPlaying && titleIndex >= 0) await SceneManager.LoadSceneAsync(titleIndex);
+        if (!Application.isPlaying || titleIndex < 0) return;
+        var screen = TitleReturnLoadingScreen.Show();
+        await Awaitable.NextFrameAsync();
+        if (Application.isPlaying) await screen.LoadTitle(titleIndex);
     }
 
     private void OnApplicationQuit() => _leavingSession = true;

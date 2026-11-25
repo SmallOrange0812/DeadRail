@@ -73,6 +73,7 @@ internal sealed class FrontendLanguage
         ["You will leave the current session and return to the title."] = "현재 게임에서 나가 타이틀 화면으로 돌아갑니다.",
         ["Could not leave the session. Please try again."] = "게임에서 나갈 수 없습니다. 다시 시도하세요.",
         ["Leaving game..."] = "게임에서 나가는 중...",
+        ["Returning to title..."] = "타이틀 화면으로 돌아가는 중...",
         ["Connecting to server..."] = "서버에 연결 중...",
         ["Connecting to lobby..."] = "로비에 연결 중...",
         ["No rooms found. Create a room to begin."] = "방이 없습니다. 방을 만들어 시작하세요.",

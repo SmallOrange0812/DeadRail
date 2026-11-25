@@ -54,6 +54,13 @@ public class ConsoleInteractable : MonoBehaviour
 
     internal static bool TryGetAimedHit(PlayerMovement player, out RaycastHit hit, bool includeTaggedItems = false)
     {
+        return TryGetAimedHit(player, out _, out hit, includeTaggedItems);
+    }
+
+    // A valid view ray can pass through a ladder opening and hit nothing in the scene.
+    internal static bool TryGetAimedHit(PlayerMovement player, out Ray ray, out RaycastHit hit, bool includeTaggedItems = false)
+    {
+        ray = default;
         hit = default;
         if (player == null || player.Object == null || !player.Object.IsValid
             || player.IsClimbingLadder || player.CameraOverrideTarget != null)
@@ -64,7 +71,7 @@ public class ConsoleInteractable : MonoBehaviour
             return false;
 
         // The host simulates the client's equipment interactions with its replicated aim.
-        Ray ray = player.IsLocalPlayer
+        ray = player.IsLocalPlayer
             ? camera.ViewportPointToRay(new Vector3(0.5f, 0.5f))
             : new Ray(camera.transform.position, player.transform.rotation * Quaternion.Euler(player.CameraPitch, 0f, 0f) * Vector3.forward);
         if (!Physics.Raycast(ray, out hit, Mathf.Infinity, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Collide))
