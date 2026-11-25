@@ -64,6 +64,8 @@ internal sealed class FrontendLanguage
         ["Joining room"] = "방 참가 중",
         ["Cancel"] = "취소",
         ["Pause menu"] = "게임 메뉴",
+        ["Drop / install battery"] = "배터리 내려놓기 / 사용",
+        ["Close console / pause"] = "콘솔 닫기 / 일시정지",
         ["Continue"] = "계속",
         ["Leave game"] = "게임 떠나기",
         ["Leave the game?"] = "게임을 떠날까요?",

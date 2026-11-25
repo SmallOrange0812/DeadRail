@@ -306,8 +306,7 @@ public class TreadmillManager : NetworkBehaviour
         if (!Runner.TryGetPlayerObject(sender, out NetworkObject player) ||
             !entryDoors.CanUseSwitch(index, player.transform.position)) return;
 
-        int bit = 1 << index;
-        ClosedEntryDoors = open ? ClosedEntryDoors & ~bit : ClosedEntryDoors | bit;
+        ClosedEntryDoors = open ? 0 : 3;
     }
 
     /// <summary>Called by the authoritative gameplay system that detects a blackout.</summary>

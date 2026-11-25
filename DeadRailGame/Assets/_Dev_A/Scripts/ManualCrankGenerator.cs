@@ -12,6 +12,7 @@ public sealed class ManualCrankGenerator : MonoBehaviour
     [Header("상호작용")]
     [SerializeField] private Transform interactionPoint;
     [SerializeField, Min(0.5f)] private float interactionDistance = 2.2f;
+    [SerializeField] private bool placeBesideBatteryPack;
 
     [Header("크랭크 시각 애니메이션")]
     [SerializeField] private Transform crankPivot;
@@ -22,13 +23,19 @@ public sealed class ManualCrankGenerator : MonoBehaviour
     [SerializeField, Min(0.02f)] private float crankAnimationSmoothTime = 0.09f;
 
     private TreadmillManager _powerManager;
+    internal static ManualCrankGenerator Instance { get; private set; }
+    private int _closedFrame = -1;
+    private int _openedFrame = -1;
+    internal bool ClosedThisFrame => _closedFrame == Time.frameCount;
     private PlayerMovement _nearbyLocalPlayer;
+    private Transform _crankView;
+    private Vector3 _savedViewPosition;
+    private Quaternion _savedViewRotation;
     private PlayerMovement _activePlayer;
     private EquipmentPivotController _activeEquipment;
     private PlayerRef _observedCrankUser = PlayerRef.None;
     private EquipmentPivotController _observedCrankEquipment;
     private bool _wasUsingTerminal;
-    private GUIStyle _promptStyle;
     private GUIStyle _detailStyle;
     private Quaternion _crankRestRotation;
     private int _lastObservedStrokeSequence = -1;
@@ -39,13 +46,68 @@ public sealed class ManualCrankGenerator : MonoBehaviour
 
     private void Awake()
     {
+        Instance = this;
         if (interactionPoint == null)
             interactionPoint = transform;
 
         FindCrankPivot();
         if (crankHandle == null && crankPivot != null)
             crankHandle = crankPivot.Find("Crank_Handle");
+        if (placeBesideBatteryPack)
+            PlaceBesideBatteryPack();
         _powerManager = TreadmillManager.Instance;
+    }
+
+    private void PlaceBesideBatteryPack()
+    {
+        Transform generator = crankPivot != null ? crankPivot.parent : null;
+        if (generator == null || generator.name != "Manual_Generator_ROOT" || generator.parent == null)
+            return;
+
+        Transform train = generator.parent;
+        Transform batteryBay = train.Find("Battery_Bay_ROOT");
+        Transform rail = batteryBay != null ? batteryBay.Find("Battery_Tray_Rail.001") : null;
+        if (rail == null || !TryGetVisualBounds(rail, train, out Bounds railBounds) ||
+            !TryGetVisualBounds(generator, train, out Bounds crankBounds))
+            return;
+
+        // Mount the crank on the yellow battery tray rail facing the aisle.
+        generator.localPosition += new Vector3(
+            railBounds.center.x - crankBounds.center.x,
+            railBounds.max.y - crankBounds.min.y,
+            railBounds.center.z - crankBounds.center.z);
+        if (!interactionPoint.IsChildOf(generator))
+            interactionPoint = crankPivot;
+    }
+
+    private static bool TryGetVisualBounds(Transform model, Transform reference, out Bounds bounds)
+    {
+        bounds = default;
+        bool found = false;
+        foreach (MeshRenderer renderer in model.GetComponentsInChildren<MeshRenderer>())
+        {
+            if (!renderer.enabled)
+                continue;
+
+            Bounds meshBounds = renderer.localBounds;
+            Matrix4x4 toTrain = reference.worldToLocalMatrix * renderer.localToWorldMatrix;
+            for (int corner = 0; corner < 8; corner++)
+            {
+                Vector3 point = toTrain.MultiplyPoint3x4(new Vector3(
+                    (corner & 1) == 0 ? meshBounds.min.x : meshBounds.max.x,
+                    (corner & 2) == 0 ? meshBounds.min.y : meshBounds.max.y,
+                    (corner & 4) == 0 ? meshBounds.min.z : meshBounds.max.z));
+                if (found)
+                    bounds.Encapsulate(point);
+                else
+                {
+                    bounds = new Bounds(point, Vector3.zero);
+                    found = true;
+                }
+            }
+        }
+
+        return found;
     }
 
     private void Update()
@@ -64,7 +126,7 @@ public sealed class ManualCrankGenerator : MonoBehaviour
         {
             if (_activePlayer.IsDowned || !_powerManager.IsBlackout ||
                 _powerManager.BackupPowerRemaining > 0f ||
-                Vector3.Distance(_activePlayer.transform.position, interactionPoint.position) > GetCrankInteractionDistance())
+                !CanReachCrank(_activePlayer))
             {
                 EndMinigame();
                 return;
@@ -72,6 +134,8 @@ public sealed class ManualCrankGenerator : MonoBehaviour
 
             if (!GamePauseMenu.BlocksGameplayInput || Input.GetKeyDown(KeyCode.Escape))
                 UpdateCrankInput();
+            if (_activePlayer != null && _activeEquipment != null && crankHandle != null)
+                _activeEquipment.BeginCrankPose(crankHandle, GetVisibleGripPoint(_activePlayer, crankHandle));
             return;
         }
 
@@ -80,13 +144,9 @@ public sealed class ManualCrankGenerator : MonoBehaviour
 
     internal static bool TryCloseLocalMinigame()
     {
-        foreach (var crank in FindObjectsByType<ManualCrankGenerator>(FindObjectsSortMode.None))
-        {
-            if (crank._activePlayer == null) continue;
-            crank.EndMinigame();
-            return true;
-        }
-        return false;
+        if (Instance == null || Instance._activePlayer == null) return false;
+        Instance.EndMinigame();
+        return true;
     }
 
     internal static bool TryInteract(PlayerMovement player)
@@ -110,12 +170,13 @@ public sealed class ManualCrankGenerator : MonoBehaviour
         NetworkRunner runner = _powerManager.Runner;
         if (!runner.TryGetPlayerObject(runner.LocalPlayer, out NetworkObject actor) ||
             !actor.TryGetComponent(out PlayerMovement player)) return null;
-        return Vector3.Distance(player.transform.position, interactionPoint.position) <= GetCrankInteractionDistance()
+        return CanReachCrank(player)
             ? player : null;
     }
 
     private void BeginMinigame(PlayerMovement player)
     {
+        _openedFrame = Time.frameCount;
         // The wider legacy range allowed starting from the nearby doorway,
         // leaving the character's body away from the crank while the IK hand
         // stretched to the handle. Require a close approach and face the unit.
@@ -127,6 +188,18 @@ public sealed class ManualCrankGenerator : MonoBehaviour
         _activePlayer = player;
         _wasUsingTerminal = player.isUsingTerminal;
         player.isUsingTerminal = true;
+
+        if (player.fpsCamera != null && crankHandle != null)
+        {
+            _crankView = player.fpsCamera.transform;
+            _savedViewPosition = _crankView.localPosition;
+            _savedViewRotation = _crankView.localRotation;
+            Vector3 towardHandle = GetVisualCenter(crankHandle) - _crankView.position;
+            _crankView.position += Vector3.ClampMagnitude(towardHandle * 0.25f, 0.25f);
+            Vector3 focus = GetVisualCenter(crankHandle) + Vector3.up * 0.08f - _crankView.position;
+            if (focus.sqrMagnitude > 0.001f)
+                _crankView.rotation = Quaternion.LookRotation(focus, Vector3.up);
+        }
 
         _activeEquipment = player.GetComponent<EquipmentPivotController>();
         if (player.Object != null && player.Object.IsValid)
@@ -140,8 +213,9 @@ public sealed class ManualCrankGenerator : MonoBehaviour
         if (_activePlayer == null)
             return;
 
-        if (Input.GetKeyDown(KeyCode.Escape))
+        if (Time.frameCount != _openedFrame && (Input.GetKeyDown(KeyCode.F) || Input.GetKeyDown(KeyCode.Escape)))
         {
+            _closedFrame = Time.frameCount;
             EndMinigame();
             return;
         }
@@ -162,26 +236,16 @@ public sealed class ManualCrankGenerator : MonoBehaviour
     {
         if (crankPivot == null)
         {
-            Transform[] candidates = transform.root.GetComponentsInChildren<Transform>(true);
-            foreach (Transform candidate in candidates)
-            {
-                if (candidate.name == "Generator_CrankPivot")
-                {
-                    crankPivot = candidate;
-                    break;
-                }
-            }
-        }
-
-        if (crankPivot == null)
-        {
+            float nearest = float.PositiveInfinity;
             foreach (Transform candidate in FindObjectsByType<Transform>(FindObjectsSortMode.None))
             {
-                if (candidate.name == "Generator_CrankPivot")
-                {
-                    crankPivot = candidate;
-                    break;
-                }
+                if (candidate.gameObject.scene != gameObject.scene ||
+                    candidate.name != "Generator_CrankPivot" || candidate.Find("Crank_Handle") == null)
+                    continue;
+                float distance = (candidate.position - interactionPoint.position).sqrMagnitude;
+                if (distance >= nearest) continue;
+                nearest = distance;
+                crankPivot = candidate;
             }
         }
 
@@ -263,6 +327,7 @@ public sealed class ManualCrankGenerator : MonoBehaviour
 
     private void EndMinigame()
     {
+        RestoreCrankView();
         if (_activePlayer != null && _activePlayer.Object != null && _activePlayer.Object.IsValid &&
             _powerManager != null && _powerManager.HasSpawned)
             _powerManager.Rpc_SetCrankUser(GetPlayerReference(_activePlayer), false);
@@ -280,6 +345,7 @@ public sealed class ManualCrankGenerator : MonoBehaviour
 
     private void OnDisable()
     {
+        RestoreCrankView();
         if (_activePlayer != null && _activePlayer.Object != null && _activePlayer.Object.IsValid &&
             _powerManager != null && _powerManager.HasSpawned)
             _powerManager.Rpc_SetCrankUser(GetPlayerReference(_activePlayer), false);
@@ -303,76 +369,66 @@ public sealed class ManualCrankGenerator : MonoBehaviour
         _crankTargetAngle = 0f;
     }
 
-    private void OnGUI()
+    internal string GetInteractionPrompt(PlayerMovement player, out Transform outline)
     {
-        if (_powerManager == null)
-            _powerManager = TreadmillManager.Instance;
-
-        if (_powerManager == null || !_powerManager.HasSpawned || !_powerManager.IsBlackout)
-            return;
+        outline = null;
+        if (!isActiveAndEnabled || player == null || player.isUsingTerminal || _activePlayer != null ||
+            _powerManager == null || !_powerManager.HasSpawned || !_powerManager.IsBlackout ||
+            !CanReachCrank(player))
+            return null;
 
         if (_powerManager.BackupPowerRemaining > 0f)
-        {
-            if (_nearbyLocalPlayer != null)
-                DrawPrompt($"임시 전력 공급 중  {_powerManager.BackupPowerRemaining:F0}초");
-            return;
-        }
+            return $"임시 전력 공급 중  {_powerManager.BackupPowerRemaining:F0}초";
+        if (_powerManager.CrankUser != PlayerRef.None && GetPlayerReference(player) != _powerManager.CrankUser)
+            return null;
 
-        if (_activePlayer == null)
-        {
-            if (_nearbyLocalPlayer != null && !_nearbyLocalPlayer.isUsingTerminal)
-                DrawPrompt("[F] 수동 크랭크 발전기 사용");
-            return;
-        }
-
-        DrawMinigame();
+        outline = crankPivot != null ? crankPivot.parent : null;
+        return "[F]  수동 크랭크 발전기 사용";
     }
 
-    private void DrawPrompt(string message)
+    private void OnGUI()
     {
-        EnsureStyles();
-        float width = Mathf.Min(620f, Screen.width - 24f);
-        const float height = 50f;
-        Rect rect = new Rect((Screen.width - width) * 0.5f, Screen.height * 0.75f, width, height);
-        DrawOutlinedLabel(rect, message, _promptStyle);
+        if (_activePlayer != null && _powerManager != null && _powerManager.HasSpawned &&
+            _powerManager.IsBlackout && _powerManager.BackupPowerRemaining <= 0f)
+            DrawMinigame();
     }
 
     private void DrawMinigame()
     {
         EnsureStyles();
-        float width = Mathf.Min(620f, Screen.width - 32f);
-        const float height = 210f;
+        // Match the P4 console's 1200 × 800 panel proportions.
+        float width = Mathf.Min(Screen.width * 0.65f, Screen.height * 0.75f);
+        float height = width * (2f / 3f);
         Rect panel = new Rect((Screen.width - width) * 0.5f, (Screen.height - height) * 0.5f, width, height);
 
         Color previousColor = GUI.color;
-        GUI.color = new Color(0.005f, 0.045f, 0.025f, 0.94f);
+        GUI.color = new Color(0.035f, 0.28f, 0.025f, 0.97f);
         GUI.DrawTexture(panel, Texture2D.whiteTexture);
-        GUI.color = new Color(0.15f, 1f, 0.38f, 0.95f);
-        DrawBorder(panel, 2f);
+        GUI.color = new Color(0f, 0.04f, 0f, 0.24f);
+        for (float y = panel.y + 1f; y < panel.yMax; y += 3f)
+            GUI.DrawTexture(new Rect(panel.x, y, panel.width, 1f), Texture2D.whiteTexture);
         GUI.color = previousColor;
 
-        DrawOutlinedLabel(new Rect(panel.x + 16f, panel.y + 12f, width - 32f, 38f),
-            "수동 크랭크 발전기", _promptStyle);
+        DrawOutlinedLabel(new Rect(panel.x + 8f, panel.y + height * 0.12f, width - 16f, height * 0.18f),
+            $"수동 크랭크 발전기  {Mathf.RoundToInt(_powerManager.CrankProgress * 100f)}%", _detailStyle);
 
         string nextKey = _powerManager.NextCrankClockwise ? "D" : "A";
-        DrawOutlinedLabel(new Rect(panel.x + 16f, panel.y + 54f, width - 32f, 42f),
-            $"[A] / [D] 번갈아 입력  ·  다음: [{nextKey}]",
+        DrawOutlinedLabel(new Rect(panel.x + 8f, panel.y + height * 0.34f, width - 16f, height * 0.18f),
+            $"[A/D] 번갈아 돌리기  ·  다음 [{nextKey}]",
             _detailStyle);
 
-        Rect bar = new Rect(panel.x + 32f, panel.y + 108f, width - 64f, 26f);
+        Rect bar = new Rect(panel.x + width * 0.10f, panel.y + height * 0.57f, width * 0.80f, height * 0.10f);
         GUI.color = new Color(0f, 0.02f, 0.01f, 1f);
         GUI.DrawTexture(bar, Texture2D.whiteTexture);
-        GUI.color = new Color(0.15f, 1f, 0.38f, 0.95f);
+        GUI.color = new Color(0.28f, 0.95f, 0.32f, 0.95f);
         DrawBorder(bar, 1f);
         Rect fill = new Rect(bar.x + 3f, bar.y + 3f,
             (bar.width - 6f) * Mathf.Clamp01(_powerManager.CrankProgress), bar.height - 6f);
         GUI.DrawTexture(fill, Texture2D.whiteTexture);
         GUI.color = previousColor;
+        DrawOutlinedLabel(new Rect(panel.x + 8f, panel.y + height * 0.73f, width - 16f, height * 0.18f),
+            "[F / Esc] 나가기", _detailStyle);
 
-        DrawOutlinedLabel(new Rect(panel.x + 16f, panel.y + 145f, width - 32f, 32f),
-            $"발전 진행  {Mathf.RoundToInt(_powerManager.CrankProgress * 100f)}%", _detailStyle);
-        DrawOutlinedLabel(new Rect(panel.x + 16f, panel.y + 174f, width - 32f, 28f),
-            "[Esc] 중단", _detailStyle);
     }
 
     private static void DrawOutlinedLabel(Rect rect, string text, GUIStyle style)
@@ -395,17 +451,6 @@ public sealed class ManualCrankGenerator : MonoBehaviour
 
     private void EnsureStyles()
     {
-        if (_promptStyle == null)
-        {
-            _promptStyle = new GUIStyle(GUI.skin.label)
-            {
-                alignment = TextAnchor.MiddleCenter,
-                fontSize = 24,
-                fontStyle = FontStyle.Bold,
-                normal = { textColor = new Color(0.2f, 1f, 0.4f) }
-            };
-        }
-
         if (_detailStyle == null)
         {
             _detailStyle = new GUIStyle(GUI.skin.label)
@@ -413,7 +458,7 @@ public sealed class ManualCrankGenerator : MonoBehaviour
                 alignment = TextAnchor.MiddleCenter,
                 fontSize = 18,
                 fontStyle = FontStyle.Bold,
-                normal = { textColor = new Color(0.2f, 1f, 0.4f) }
+                normal = { textColor = new Color(0.48f, 1f, 0.5f) }
             };
         }
     }
@@ -472,5 +517,16 @@ public sealed class ManualCrankGenerator : MonoBehaviour
     private float GetCrankInteractionDistance()
     {
         return Mathf.Min(interactionDistance, MaximumCrankInteractionDistance);
+    }
+
+    private bool CanReachCrank(PlayerMovement player) =>
+        RailRouteLoop.CanReachTrainInterior(player.transform.position) &&
+        Vector3.Distance(player.transform.position, interactionPoint.position) <= GetCrankInteractionDistance();
+
+    private void RestoreCrankView()
+    {
+        if (_crankView != null)
+            _crankView.SetLocalPositionAndRotation(_savedViewPosition, _savedViewRotation);
+        _crankView = null;
     }
 }

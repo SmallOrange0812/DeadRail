@@ -7,11 +7,34 @@ using UnityEngine.UI;
 public enum RailRoute { Left, Straight, Right }
 public enum RailEntryOutcome { Normal, CargoDamaged, Blackout }
 public enum FarmingSupplyKind { RouteCapacity, FuelCapacity, BatteryCapacity, MedicalKit, RepairKit, Ammunition, Fuel, Battery }
+public struct BatteryCarryState : INetworkStruct
+{
+    public PlayerRef Carrier;
+    public NetworkBool Dropped;
+    public Vector3 Position;
+}
 public enum RailTravelPhase { Cruise, Junction, EntryTransition, Approach, Farming, MissedStop, ExitTransition, ReapproachTransition, Departing }
 
 /// <summary>Authority owns route progress. Each peer presents the same authored track around a stationary train.</summary>
 public sealed partial class RailRouteLoop : NetworkBehaviour
 {
+    private const int MaxSupplySlots = 30;
+    [Networked, Capacity(MaxSupplySlots)]
+    private NetworkArray<BatteryCarryState> BatteryStates => default;
+
+    private int SupplySlotCount => Mathf.Min(supplyPoints.Length, MaxSupplySlots);
+
+    internal bool IsCarryingBattery(PlayerRef player) =>
+        Ready && Phase == RailTravelPhase.Farming && FindCarriedBattery(player) >= 0;
+
+    private int FindCarriedBattery(PlayerRef player)
+    {
+        if (player == PlayerRef.None) return -1;
+        for (int i = 0; i < SupplySlotCount; i++)
+            if (BatteryStates[i].Carrier == player) return i;
+        return -1;
+    }
+
     [Header("Authored layout")]
     public Transform junctionGeometry;
     public Transform farmingGeometry;
@@ -97,6 +120,8 @@ public sealed partial class RailRouteLoop : NetworkBehaviour
     private float[] leftDistances, straightDistances, rightDistances;
     private MaterialPropertyBlock supplyProperties;
     private (FarmingSupplyKind kind, GameObject instance)[] supplyVisuals;
+    private Quaternion[] supplyGroundRotations;
+    private int floorAlignedVisit = -1;
     private int nearbySupply = -1;
 
     private float CutsceneSeconds => UsesTunnelCinematic && transitionDirector != null && transitionDirector.playableAsset != null
@@ -115,6 +140,9 @@ public sealed partial class RailRouteLoop : NetworkBehaviour
         rightDistances = BuildDistances(rightPath);
         supplyProperties = new MaterialPropertyBlock();
         supplyVisuals = new (FarmingSupplyKind, GameObject)[supplyPoints.Length];
+        supplyGroundRotations = new Quaternion[supplyPoints.Length];
+        for (int i = 0; i < supplyPoints.Length; i++)
+            supplyGroundRotations[i] = supplyPoints[i].localRotation;
     }
 
     public override void Spawned()
@@ -128,6 +156,17 @@ public sealed partial class RailRouteLoop : NetworkBehaviour
     public override void FixedUpdateNetwork()
     {
         if (!HasStateAuthority) return;
+        if (Phase == RailTravelPhase.Farming)
+        {
+            for (int i = 0; i < SupplySlotCount; i++)
+            {
+                BatteryCarryState state = BatteryStates[i];
+                if (state.Carrier == PlayerRef.None || Runner.TryGetPlayerObject(state.Carrier, out _)) continue;
+                state.Carrier = PlayerRef.None;
+                state.Dropped = true;
+                BatteryStates.Set(i, state);
+            }
+        }
         TreadmillManager train = TreadmillManager.Instance;
         UpdateDefeat(train);
         if (Defeated) return;
@@ -154,6 +193,7 @@ public sealed partial class RailRouteLoop : NetworkBehaviour
                 Phase = RailTravelPhase.Cruise;
                 PhaseDistance = cruisingDistance;
                 CollectedSupplies = 0;
+                for (int i = 0; i < SupplySlotCount; i++) BatteryStates.Set(i, default);
                 ActiveMapIndex = -1;
                 BranchEntryFailed = false;
                 TransitionTime = 0f;
@@ -240,6 +280,12 @@ public sealed partial class RailRouteLoop : NetworkBehaviour
         CountPlayers();
         DepartureWaiting = PlayersAboard < PlayerCount;
         if (DepartureWaiting) return false;
+        for (int i = 0; i < SupplySlotCount; i++)
+        {
+            if (BatteryStates[i].Carrier == PlayerRef.None) continue;
+            Debug.Log("[배터리] 들고 있는 배터리를 먼저 사용하거나 내려놓아야 출발할 수 있습니다.");
+            return false;
+        }
         StartTransition(RailTravelPhase.Departing);
         return true;
     }
@@ -277,12 +323,23 @@ public sealed partial class RailRouteLoop : NetworkBehaviour
         if ((CollectedSupplies & (1 << index)) != 0) return;
         PlayerRef sender = info.Source == PlayerRef.None ? Runner.LocalPlayer : info.Source;
         if (!Runner.TryGetPlayerObject(sender, out NetworkObject player)) return;
-        if (IsAboard(player.transform.position) || Vector3.Distance(player.transform.position, supplyPoints[index].position) > 3f) return;
+        BatteryCarryState state = BatteryStates[index];
+        Vector3 position = state.Dropped ? state.Position : supplyPoints[index].position;
+        if (state.Carrier != PlayerRef.None || (!state.Dropped && IsAboard(player.transform.position)) ||
+            Vector3.Distance(player.transform.position, position) > 3f) return;
         TreadmillManager train = TreadmillManager.Instance;
         FarmingSupplyKind kind = GetSupplyKind(index);
-        bool personalSupply = kind is FarmingSupplyKind.MedicalKit or FarmingSupplyKind.RepairKit or FarmingSupplyKind.Ammunition;
         if (!player.TryGetComponent(out PlayerMovement collector) || collector.IsDowned ||
-            (personalSupply && !collector.HasStateAuthority)) return;
+            FindCarriedBattery(sender) >= 0) return;
+        if (kind is FarmingSupplyKind.Battery or FarmingSupplyKind.BatteryCapacity)
+        {
+            if (CargoFuelCarrier == sender) return;
+            BatteryStates.Set(index, new BatteryCarryState { Carrier = sender, Position = position });
+            collector.Rpc_PlayPickupSound();
+            return;
+        }
+        bool personalSupply = kind is FarmingSupplyKind.MedicalKit or FarmingSupplyKind.RepairKit or FarmingSupplyKind.Ammunition;
+        if (personalSupply && !collector.HasStateAuthority) return;
         if (VisitNumber == 1 && kind == FarmingSupplyKind.Fuel)
         {
             if (CargoFuelCarrier != PlayerRef.None || FirstFuelDelivered) return;
@@ -301,6 +358,40 @@ public sealed partial class RailRouteLoop : NetworkBehaviour
         if (personalSupply) collector.RecordInventoryPickup(kind);
         CollectedSupplies |= 1 << index;
         collector.Rpc_PlayPickupSound();
+    }
+
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    private void Rpc_ReleaseBattery(NetworkBool useBattery, RpcInfo info = default)
+    {
+        if (Phase != RailTravelPhase.Farming) return;
+        PlayerRef sender = info.Source == PlayerRef.None ? Runner.LocalPlayer : info.Source;
+        int index = FindCarriedBattery(sender);
+        if (index < 0 || !Runner.TryGetPlayerObject(sender, out NetworkObject player)) return;
+
+        if (useBattery)
+        {
+            if (!IsAboard(player.transform.position)) return;
+            FarmingSupplyKind kind = GetSupplyKind(index);
+            float amount = kind == FarmingSupplyKind.BatteryCapacity ? capacityUpgradeAmount : supplyAmount;
+            TreadmillManager train = TreadmillManager.Instance;
+            if (train == null || !train.CollectSupply(kind, amount)) return;
+            CollectedSupplies |= 1 << index;
+            BatteryStates.Set(index, default);
+            Debug.Log($"[보급] {SupplyName(index)} 사용");
+            return;
+        }
+
+        Vector3 origin = player.transform.TransformPoint(new Vector3(0f, 0.6f, 0.9f));
+        if (!Physics.Raycast(origin, Vector3.down, out RaycastHit floor, 2.5f,
+            Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore) || floor.normal.y < 0.65f)
+            return;
+
+        float halfHeight = supplyPoints[index].TransformVector(Vector3.up * 0.5f).magnitude;
+        BatteryStates.Set(index, new BatteryCarryState
+        {
+            Dropped = true,
+            Position = floor.point + Vector3.up * halfHeight
+        });
     }
 
     public FarmingSupplyKind GetSupplyKind(int index)
@@ -400,6 +491,9 @@ public sealed partial class RailRouteLoop : NetworkBehaviour
 
     public bool IsAboard(Vector3 worldPosition) => trainTransform != null && boardingBounds.Contains(trainTransform.InverseTransformPoint(worldPosition));
 
+    internal static bool CanReachTrainInterior(Vector3 position) =>
+        Instance == null || Instance.trainTransform == null || Instance.IsAboard(position);
+
     private void CountPlayers()
     {
         int aboard = 0, total = 0;
@@ -451,6 +545,27 @@ public sealed partial class RailRouteLoop : NetworkBehaviour
         RenderCargoDoorMarker();
         RenderEntrySpeedSign();
         RenderRunResult();
+        if (Phase != RailTravelPhase.Farming) floorAlignedVisit = -1;
+        if (Phase == RailTravelPhase.Farming && floorAlignedVisit != VisitNumber)
+        {
+            Physics.SyncTransforms();
+            for (int i = 0; i < supplyPoints.Length; i++)
+            {
+                if (i < SupplySlotCount && (BatteryStates[i].Dropped || BatteryStates[i].Carrier != PlayerRef.None))
+                    continue;
+                Transform point = supplyPoints[i];
+                Vector3 bottom = point.TransformPoint(Vector3.down * 0.5f);
+                float lift = 0.18f;
+                foreach (RaycastHit hit in Physics.RaycastAll(point.position + Vector3.up * 0.9f,
+                    Vector3.down, 2f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
+                {
+                    if (hit.normal.y < 0.65f || hit.collider.transform.IsChildOf(point)) continue;
+                    lift = Mathf.Max(lift, hit.point.y - bottom.y + 0.07f);
+                }
+                point.position += Vector3.up * lift;
+            }
+            floorAlignedVisit = VisitNumber;
+        }
         for (int i = 0; farmingGeometry.gameObject.activeInHierarchy && i < supplyPoints.Length; i++)
         {
             bool available = (CollectedSupplies & (1 << i)) == 0;
@@ -459,6 +574,22 @@ public sealed partial class RailRouteLoop : NetworkBehaviour
 
             FarmingSupplyKind kind = GetSupplyKind(i);
             bool hasModel = ShowSupplyModel(i, kind);
+            if (i < SupplySlotCount && kind is (FarmingSupplyKind.Battery or FarmingSupplyKind.BatteryCapacity))
+            {
+                BatteryCarryState state = BatteryStates[i];
+                bool carried = state.Carrier != PlayerRef.None;
+                if (carried && Runner.TryGetPlayerObject(state.Carrier, out NetworkObject carrier))
+                    supplyPoints[i].SetPositionAndRotation(GetBatteryCarryPosition(carrier.transform),
+                        GetBatteryCarryRotation(i, carrier.transform));
+                else if (state.Dropped)
+                    supplyPoints[i].position = state.Position;
+                if (!carried) supplyPoints[i].localRotation = supplyGroundRotations[i];
+                if (supplyPoints[i].TryGetComponent(out Collider itemCollider))
+                    itemCollider.enabled = !carried;
+                if (supplyLabels != null && i < supplyLabels.Length && supplyLabels[i] != null &&
+                    supplyLabels[i].TryGetComponent(out Renderer labelRenderer))
+                    labelRenderer.enabled = !carried;
+            }
             if (i < supplyRenderers.Length && supplyRenderers[i] != null)
             {
                 supplyRenderers[i].enabled = !hasModel;
@@ -478,7 +609,12 @@ public sealed partial class RailRouteLoop : NetworkBehaviour
                 hudText.text += $"\n{CargoStatus()}";
             string cargoPrompt = CargoPrompt();
             if (!string.IsNullOrEmpty(cargoPrompt)) hudText.text += $"\n{cargoPrompt}";
-            if (Phase == RailTravelPhase.Farming && nearbySupply >= 0 && (CollectedSupplies & (1 << nearbySupply)) == 0)
+            int carried = Phase == RailTravelPhase.Farming ? FindCarriedBattery(Runner.LocalPlayer) : -1;
+            if (carried >= 0 && Runner.TryGetPlayerObject(Runner.LocalPlayer, out NetworkObject carrier))
+                hudText.text += IsAboard(carrier.transform.position)
+                    ? "\n배터리 운반 중 · [G] 사용 · [Q] 내려놓기"
+                    : "\n배터리 운반 중 · 열차로 이동 · [Q] 내려놓기";
+            else if (Phase == RailTravelPhase.Farming && nearbySupply >= 0 && (CollectedSupplies & (1 << nearbySupply)) == 0)
                 hudText.text += $"\n[F] {SupplyName(nearbySupply)} {(VisitNumber == 1 && GetSupplyKind(nearbySupply) == FarmingSupplyKind.Fuel ? "들기" : "회수")}";
             TreadmillManager train = TreadmillManager.Instance;
             if (train != null && train.HasSpawned && train.IsBlackout)
@@ -524,6 +660,13 @@ public sealed partial class RailRouteLoop : NetworkBehaviour
 
     private void Update()
     {
+        if (!Ready || Phase != RailTravelPhase.Farming || GamePauseMenu.BlocksGameplayInput ||
+            TerminalUIManager.Instance?.BlocksPlayerInput == true) return;
+        if (Input.GetKeyDown(KeyCode.Q) || Input.GetKeyDown(KeyCode.G))
+        {
+            if (FindCarriedBattery(Runner.LocalPlayer) >= 0)
+                Rpc_ReleaseBattery(Input.GetKeyDown(KeyCode.G));
+        }
         // Standalone test scenes can run the proximity pickup without a terminal HUD.
         if (TerminalUIManager.Instance != null && TerminalUIManager.Instance.isActiveAndEnabled) return;
         nearbySupply = -1;
@@ -536,7 +679,8 @@ public sealed partial class RailRouteLoop : NetworkBehaviour
     {
         includeChildren = false;
         nearbySupply = -1;
-        if (player == null || !Ready || Phase != RailTravelPhase.Farming || player.IsDowned || IsAboard(player.transform.position))
+        if (player == null || !Ready || Phase != RailTravelPhase.Farming || player.IsDowned ||
+            FindCarriedBattery(Runner.LocalPlayer) >= 0)
             return null;
         for (int i = 0; i < supplyPoints.Length && i < 30; i++)
         {
@@ -553,9 +697,14 @@ public sealed partial class RailRouteLoop : NetworkBehaviour
 
     private bool CanTakeSupply(int index, Vector3 position)
     {
-        if ((CollectedSupplies & (1 << index)) != 0 || (supplyPoints[index].position - position).sqrMagnitude > 9f)
+        BatteryCarryState state = BatteryStates[index];
+        Vector3 itemPosition = state.Dropped ? state.Position : supplyPoints[index].position;
+        if ((CollectedSupplies & (1 << index)) != 0 || state.Carrier != PlayerRef.None ||
+            (!state.Dropped && IsAboard(position)) || (itemPosition - position).sqrMagnitude > 9f)
             return false;
         FarmingSupplyKind kind = GetSupplyKind(index);
+        if (kind is FarmingSupplyKind.Battery or FarmingSupplyKind.BatteryCapacity)
+            return CargoFuelCarrier != Runner.LocalPlayer;
         if (VisitNumber == 1 && kind == FarmingSupplyKind.Fuel)
             return CargoFuelCarrier == PlayerRef.None && !FirstFuelDelivered;
         TreadmillManager train = TreadmillManager.Instance;
@@ -565,11 +714,70 @@ public sealed partial class RailRouteLoop : NetworkBehaviour
     internal bool TryCollectNearbySupply(PlayerMovement player)
     {
         if (!Ready || Phase != RailTravelPhase.Farming || nearbySupply < 0 ||
-            IsAboard(player.transform.position) || !CanTakeSupply(nearbySupply, player.transform.position))
+            player.IsDowned || FindCarriedBattery(Runner.LocalPlayer) >= 0 || !CanTakeSupply(nearbySupply, player.transform.position))
             return false;
 
         Rpc_CollectSupply(nearbySupply);
         return true;
+    }
+
+    internal static Vector3 GetBatteryCarryPosition(Transform player) =>
+        player.TransformPoint(new Vector3(0f, -0.05f, 0.65f));
+
+    private Quaternion GetBatteryCarryRotation(int index, Transform body)
+    {
+        MeshFilter handle = FindBatteryHandle(index);
+        if (handle == null) return body.rotation;
+
+        Transform point = supplyPoints[index];
+        Vector3 handleOffset = Quaternion.Inverse(point.rotation) *
+            (handle.transform.TransformPoint(handle.sharedMesh.bounds.center) - point.position);
+        handleOffset.y = 0f;
+        if (handleOffset.sqrMagnitude < 0.0001f) return body.rotation;
+
+        float yaw = Vector3.SignedAngle(handleOffset, Vector3.back, Vector3.up);
+        return body.rotation * Quaternion.AngleAxis(yaw, Vector3.up);
+    }
+
+    private MeshFilter FindBatteryHandle(int index)
+    {
+        GameObject model = supplyVisuals[index].instance;
+        if (model == null) return null;
+        foreach (MeshFilter part in model.GetComponentsInChildren<MeshFilter>())
+        {
+            if (part.sharedMesh != null &&
+                part.name.StartsWith("Battery_Handle", StringComparison.OrdinalIgnoreCase) &&
+                part.name.IndexOf("Post", StringComparison.OrdinalIgnoreCase) < 0)
+                return part;
+        }
+        return null;
+    }
+
+    internal bool TryGetBatteryHandleGrips(PlayerRef player, Transform body, out Vector3 left, out Vector3 right)
+    {
+        left = right = default;
+        if (!Ready || Phase != RailTravelPhase.Farming) return false;
+        int index = FindCarriedBattery(player);
+        if (index < 0 || supplyVisuals[index].instance == null) return false;
+
+        MeshFilter part = FindBatteryHandle(index);
+        if (part != null)
+        {
+            Bounds bounds = part.sharedMesh.bounds;
+            Vector3 e = bounds.extents;
+            Vector3 axis = e.x >= e.y && e.x >= e.z ? Vector3.right * e.x
+                : e.y >= e.z ? Vector3.up * e.y : Vector3.forward * e.z;
+            Transform point = supplyPoints[index];
+            Quaternion turn = GetBatteryCarryRotation(index, body) * Quaternion.Inverse(point.rotation);
+            Vector3 carryPosition = GetBatteryCarryPosition(body);
+            Vector3 a = carryPosition + turn * (part.transform.TransformPoint(bounds.center - axis * 0.42f) - point.position);
+            Vector3 b = carryPosition + turn * (part.transform.TransformPoint(bounds.center + axis * 0.42f) - point.position);
+            if (Vector3.Dot(b - a, body.right) < 0f) (a, b) = (b, a);
+            left = a - body.forward * 0.045f;
+            right = b - body.forward * 0.045f;
+            return true;
+        }
+        return false;
     }
 
     private void PresentTransition()

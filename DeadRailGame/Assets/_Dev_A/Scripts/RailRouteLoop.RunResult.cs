@@ -98,6 +98,7 @@ public sealed partial class RailRouteLoop
         EntryOutcome = RailEntryOutcome.Normal;
         DepartureWaiting = false;
         CollectedSupplies = 0;
+        for (int i = 0; i < SupplySlotCount; i++) BatteryStates.Set(i, default);
         EncounterVisit = 0;
         ZombieCount = 0;
         CargoDoorHealth = CargoDoorMaxHealth;

@@ -13,6 +13,7 @@ public class TerminalUIManager : MonoBehaviour
     private ConsoleInteractable _aimedConsole;
     private TrainDoorSwitch _aimedDoorSwitch;
     private AimOutline _aimOutline;
+    private string _equipmentPrompt;
     private bool _isUiOpen;
     private bool _inventoryOpen;
     private int _openedFrame;
@@ -65,7 +66,9 @@ public class TerminalUIManager : MonoBehaviour
     {
         _aimedConsole = null;
         _aimedDoorSwitch = null;
-        bool canAim = !_isUiOpen && CanOpenUi(allowHarpoon: true);
+        _equipmentPrompt = null;
+        Transform equipmentOutline = null;
+        bool canAim = !_isUiOpen && CanOpenUi(allowActiveEquipment: true);
         bool onFoot = canAim && _localPlayer.CanUsePersonalEquipment;
         Transform harpoonItem = null;
         Transform hitSurface = null;
@@ -74,17 +77,27 @@ public class TerminalUIManager : MonoBehaviour
             if (onFoot)
             {
                 hitSurface = hit.collider.transform;
-                _aimedConsole = ConsoleInteractable.GetConsoleFromHit(_localPlayer, hit);
-                TrainDoorSwitch button = hit.collider.GetComponent<TrainDoorSwitch>();
-                if (button != null && button.IsInReach(_localPlayer.transform.position))
-                    _aimedDoorSwitch = button;
+                if (RailRouteLoop.CanReachTrainInterior(_localPlayer.transform.position))
+                {
+                    _aimedConsole = ConsoleInteractable.GetConsoleFromHit(_localPlayer, hit);
+                    TrainDoorSwitch button = hit.collider.GetComponent<TrainDoorSwitch>();
+                    if (button != null && button.IsInReach(_localPlayer.transform.position))
+                        _aimedDoorSwitch = button;
+                }
             }
             else if (hit.transform.CompareTag("Item") && _localPlayer.TryGetComponent(out HarpoonFarming harpoon) &&
                      harpoon.CanHighlightPickup(hit.distance))
                 harpoonItem = hit.transform;
         }
+        if (canAim && _aimedConsole == null && _aimedDoorSwitch == null && RailRouteLoop.CanReachTrainInterior(_localPlayer.transform.position))
+        {
+            if (_localPlayer.TryGetComponent(out EquipmentPivotController equipment))
+                _equipmentPrompt = equipment.GetEquipmentPrompt(out equipmentOutline);
+            if (_equipmentPrompt == null && ManualCrankGenerator.Instance != null)
+                _equipmentPrompt = ManualCrankGenerator.Instance.GetInteractionPrompt(_localPlayer, out equipmentOutline);
+        }
         Transform target = _aimedDoorSwitch != null ? _aimedDoorSwitch.transform :
-            _aimedConsole != null ? _aimedConsole.transform : harpoonItem;
+            _aimedConsole != null ? _aimedConsole.transform : harpoonItem != null ? harpoonItem : equipmentOutline;
         bool includeChildren = _aimedDoorSwitch == null;
         if (RailRouteLoop.Instance != null)
         {
@@ -102,7 +115,8 @@ public class TerminalUIManager : MonoBehaviour
     internal bool TryInteractWithAimedTarget(PlayerMovement player, out bool useSearchlight)
     {
         useSearchlight = false;
-        if (_isUiOpen || !CanOpenUi() || player != _localPlayer)
+        if (_isUiOpen || !CanOpenUi() || player != _localPlayer ||
+            !RailRouteLoop.CanReachTrainInterior(player.transform.position))
             return false;
         if (_aimedDoorSwitch != null && _aimedDoorSwitch.IsInReach(player.transform.position))
         {
@@ -144,6 +158,21 @@ public class TerminalUIManager : MonoBehaviour
         SetPanels(null, false);
     }
 
+    internal bool TryCloseForEscape()
+    {
+        if (_isUiOpen)
+        {
+            CloseAllTerminals();
+            return true;
+        }
+        if (_localPlayer == null || _localPlayer.Object == null || !_localPlayer.Object.IsValid ||
+            !_localPlayer.TryGetComponent(out EquipmentPivotController station) ||
+            station.CurrentMode == EquipmentPivotController.EquipmentMode.None) return false;
+        station.Rpc_LeaveStation(station.CurrentMode);
+        _closedFrame = Time.frameCount;
+        return true;
+    }
+
     private GameObject GetConsolePanel(ConsoleInteractable console) => console.consoleType switch
     {
         ConsoleInteractable.ConsoleType.P1_DriveCinsole => p1HackingPanel,
@@ -151,7 +180,7 @@ public class TerminalUIManager : MonoBehaviour
         _ => null
     };
 
-    private bool CanOpenUi(bool allowHarpoon = false)
+    private bool CanOpenUi(bool allowActiveEquipment = false)
     {
         if (GamePauseMenu.BlocksGameplayInput) return false;
         RailRouteLoop route = RailRouteLoop.Instance;
@@ -168,12 +197,11 @@ public class TerminalUIManager : MonoBehaviour
         }
 
         if (_localPlayer == null || _localPlayer.Object == null || !_localPlayer.Object.IsValid
-            || _localPlayer.IsDowned || _localPlayer.IsClimbingLadder || (_localPlayer.isUsingTerminal && !_isUiOpen))
+            || _localPlayer.IsDowned || (!allowActiveEquipment && _localPlayer.IsClimbingLadder) || (_localPlayer.isUsingTerminal && !_isUiOpen))
             return false;
 
-        return !_localPlayer.TryGetComponent(out EquipmentPivotController equipment)
-            || equipment.CurrentMode == EquipmentPivotController.EquipmentMode.None
-            || (allowHarpoon && equipment.CurrentMode == EquipmentPivotController.EquipmentMode.P3_HarpoonMount);
+        return allowActiveEquipment || !_localPlayer.TryGetComponent(out EquipmentPivotController equipment)
+            || equipment.CurrentMode == EquipmentPivotController.EquipmentMode.None;
     }
 
     private void SetPanels(GameObject terminal, bool showInventory)
@@ -205,6 +233,7 @@ public class TerminalUIManager : MonoBehaviour
             if (_aimedDoorSwitch != null) DrawInteractionPrompt(_aimedDoorSwitch.Prompt);
             else if (_aimedConsole != null)
                 DrawInteractionPrompt($"[F]  {_aimedConsole.DisplayName}");
+            else DrawInteractionPrompt(_equipmentPrompt);
         }
     }
 

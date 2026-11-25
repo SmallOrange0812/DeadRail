@@ -283,7 +283,8 @@ internal sealed class FrontendAdditionalPages
         GuideControl(controls, 5, "R", "Reload / console rescan");
         GuideControl(controls, 6, "Z", "Toggle zoom");
         GuideControl(controls, 7, "Tab", "Inventory");
-        GuideControl(controls, 8, "Esc", "Pause menu");
+        GuideControl(controls, 8, "Q / G", "Drop / install battery");
+        GuideControl(controls, 9, "Esc", "Close console / pause");
 
         GuideBack = InformationBack(panel, 1120, 734);
     }
@@ -304,7 +305,7 @@ internal sealed class FrontendAdditionalPages
 
     private void GuideControl(RectTransform controls, int row, string key, string action)
     {
-        float y = 75 + row * 56;
+        float y = 75 + row * 50;
         RectTransform cap = FramedBox(controls, key, 20, y, 190, 41, Panel).rectTransform;
         language.Bind(Label(cap, "Key", 3, 0, 184, 41, 20, TextAnchor.MiddleCenter), key);
         language.Bind(Label(controls, action, 224, y, 270, 42, 21), action);

@@ -45,11 +45,7 @@ public sealed class GamePauseMenu : MonoBehaviour
         {
             case Page.Closed:
                 var terminal = TerminalUIManager.Instance;
-                if (terminal != null && terminal.IsUiOpen)
-                {
-                    terminal.CloseAllTerminals();
-                    return;
-                }
+                if (terminal != null && terminal.TryCloseForEscape()) return;
                 if (ManualCrankGenerator.TryCloseLocalMinigame()) return;
                 if (network == null || !network.HasRunningSession) return;
                 if (overlay == null) BuildMenu();

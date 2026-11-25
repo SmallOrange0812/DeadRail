@@ -11760,6 +11760,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ManualCrankGenerator
   interactionPoint: {fileID: 529583433}
   interactionDistance: 1.35
+  placeBesideBatteryPack: 0
   crankPivot: {fileID: 0}
   crankHandle: {fileID: 0}
   crankHandSurfaceOffset: 0.07
@@ -42429,11 +42430,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2972586363496237237, guid: 8c39e19aaf0f90745848273ffe7ed14d, type: 3}
       propertyPath: m_LocalPosition.y
-      value: -4.856
+      value: -4.224
       objectReference: {fileID: 0}
     - target: {fileID: 2972586363496237237, guid: 8c39e19aaf0f90745848273ffe7ed14d, type: 3}
       propertyPath: m_LocalPosition.z
-      value: 3.932
+      value: 3.946
       objectReference: {fileID: 0}
     - target: {fileID: 4969098829211467621, guid: 8c39e19aaf0f90745848273ffe7ed14d, type: 3}
       propertyPath: m_LocalPosition.x
