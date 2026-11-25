@@ -10,6 +10,13 @@ public sealed class FrontendBackdrop : MonoBehaviour
     private RenderTexture texture;
     private Material material;
     private Camera outputCamera;
+    private float blurRadius = 4f;
+
+    public void SetBlurRadius(float radius)
+    {
+        blurRadius = radius;
+        if (material != null) material.SetFloat("_Radius", radius);
+    }
 
     public void SetBlurred(bool blurred)
     {
@@ -46,7 +53,7 @@ public sealed class FrontendBackdrop : MonoBehaviour
             material = new Material(blurShader) { name = "Frontend blur instance" };
             blurredView.material = material;
         }
-        material.SetFloat("_Radius", 4f);
+        material.SetFloat("_Radius", blurRadius);
         backgroundCamera.targetTexture = texture;
         blurredView.texture = texture;
     }

@@ -25,6 +25,7 @@ public class SearchlightSignboard : MonoBehaviour
     public TextMesh legacyTextMesh;
     public TMP_Text tmpText;
     public Renderer boardRenderer;
+    [HideInInspector] public bool usesRouteSpeeds;
 
     private List<Light> _candidateLights = new List<Light>();
     private float _currentAlpha = 0f;
@@ -35,6 +36,14 @@ public class SearchlightSignboard : MonoBehaviour
         SetupTextComponents();
         RefreshLightList();
         ApplyVisualAlpha(0f);
+    }
+
+    internal void SetHiddenMessage(string message)
+    {
+        if (hiddenMessage == message) return;
+        hiddenMessage = message;
+        if (legacyTextMesh != null) legacyTextMesh.text = message;
+        if (tmpText != null) tmpText.text = message;
     }
 
     [ContextMenu("🪧 표지판 3D 텍스트 자동 생성/갱신")]
@@ -104,6 +113,25 @@ public class SearchlightSignboard : MonoBehaviour
 
     private bool CheckIfIlluminatedBySearchlight()
     {
+        if (usesRouteSpeeds)
+        {
+            RailRouteLoop route = RailRouteLoop.Instance;
+            if (route == null || !route.Ready) return false;
+            foreach (var player in route.Runner.ActivePlayers)
+            {
+                if (!route.Runner.TryGetPlayerObject(player, out var actor) ||
+                    !actor.TryGetComponent(out EquipmentPivotController equipment) ||
+                    equipment.CurrentMode != EquipmentPivotController.EquipmentMode.P2_Searchlight ||
+                    !equipment.IsSearchlightOn) continue;
+                Light beam = equipment.searchlightLamp;
+                if (beam == null || !beam.isActiveAndEnabled) continue;
+                Vector3 direction = transform.position - beam.transform.position;
+                if (direction.magnitude <= beam.range * rangeMultiplier &&
+                    Vector3.Angle(beam.transform.forward, direction) <= beam.spotAngle * 0.5f + angleTolerance)
+                    return true;
+            }
+            return false;
+        }
         Vector3 boardPos = transform.position;
 
         foreach (Light spot in _candidateLights)

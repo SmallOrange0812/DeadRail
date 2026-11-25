@@ -24,7 +24,7 @@ public class TerminalUIManager : MonoBehaviour
     private GUIStyle _inventoryHintStyle;
 
     public bool IsUiOpen => _isUiOpen;
-    internal bool BlocksPlayerInput => _isUiOpen || Time.frameCount == _closedFrame;
+    internal bool BlocksPlayerInput => GamePauseMenu.BlocksGameplayInput || _isUiOpen || Time.frameCount == _closedFrame;
 
     private void Awake()
     {
@@ -42,21 +42,20 @@ public class TerminalUIManager : MonoBehaviour
 
     private void Update()
     {
+        if (GamePauseMenu.BlocksGameplayInput) return;
         if (Input.GetKeyDown(KeyCode.Tab))
         {
             if (_inventoryOpen) CloseAllTerminals();
             else if (CanOpenUi()) SetPanels(null, true);
         }
-        else if (Input.GetKeyDown(KeyCode.T))
+        else if (_isUiOpen && !_inventoryOpen && Input.GetKeyDown(KeyCode.R))
         {
-            ToggleP1Hacking();
-        }
-        else if (Input.GetKeyDown(KeyCode.Y))
-        {
-            ToggleP4Radar();
+            if (_localPlayer != null && _localPlayer.HasRole(TrainRole.Radar) &&
+                MapNodeManager.Instance != null && MapNodeManager.Instance.IsNodeDataReady)
+                MapNodeManager.Instance.Rpc_ForceRescanBranch();
         }
         else if (_isUiOpen && Time.frameCount != _openedFrame
-            && (Input.GetKeyDown(KeyCode.Escape) || (!_inventoryOpen && Input.GetKeyDown(KeyCode.E))))
+            && (Input.GetKeyDown(KeyCode.Escape) || (!_inventoryOpen && Input.GetKeyDown(KeyCode.F))))
         {
             CloseAllTerminals();
         }
@@ -90,7 +89,7 @@ public class TerminalUIManager : MonoBehaviour
 
         // Use the same target the player saw on the last rendered frame.
         ConsoleInteractable console = _aimedConsole;
-        if (console == null || !console.isActiveAndEnabled)
+        if (console == null || !console.isActiveAndEnabled || !player.HasRole(console.RequiredRole))
             return false;
         if (console.consoleType == ConsoleInteractable.ConsoleType.P2_SearchlightConsole)
         {
@@ -112,6 +111,8 @@ public class TerminalUIManager : MonoBehaviour
     public void ToggleTerminal(GameObject targetPanel)
     {
         if (targetPanel == null || !CanOpenUi()) return;
+        if ((targetPanel == p1HackingPanel && !_localPlayer.HasRole(TrainRole.Driver)) ||
+            (targetPanel == p4RadarPanel && !_localPlayer.HasRole(TrainRole.Radar))) return;
         SetPanels(targetPanel.activeSelf ? null : targetPanel, false);
     }
 
@@ -129,6 +130,7 @@ public class TerminalUIManager : MonoBehaviour
 
     private bool CanOpenUi()
     {
+        if (GamePauseMenu.BlocksGameplayInput) return false;
         RailRouteLoop route = RailRouteLoop.Instance;
         if (route != null && route.Ready && route.IsTransition) return false;
 
@@ -143,7 +145,7 @@ public class TerminalUIManager : MonoBehaviour
         }
 
         if (_localPlayer == null || _localPlayer.Object == null || !_localPlayer.Object.IsValid
-            || _localPlayer.IsClimbingLadder || (_localPlayer.isUsingTerminal && !_isUiOpen))
+            || _localPlayer.IsDowned || _localPlayer.IsClimbingLadder || (_localPlayer.isUsingTerminal && !_isUiOpen))
             return false;
 
         return !_localPlayer.TryGetComponent(out EquipmentPivotController equipment)
@@ -178,7 +180,7 @@ public class TerminalUIManager : MonoBehaviour
         {
             if (_aimedDoorSwitch != null) DrawInteractionPrompt(_aimedDoorSwitch.Prompt);
             else if (_aimedConsole != null)
-                DrawInteractionPrompt($"[E]  {_aimedConsole.DisplayName}");
+                DrawInteractionPrompt($"[F]  {_aimedConsole.DisplayName}");
         }
     }
 

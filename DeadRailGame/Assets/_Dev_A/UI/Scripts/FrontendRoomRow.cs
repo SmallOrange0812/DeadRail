@@ -17,7 +17,7 @@ public sealed class FrontendRoomRow : MonoBehaviour
         roomName.text = session.Name;
         players.text = $"{session.PlayerCount} / {session.MaxPlayers}";
         map.text = session.Properties.TryGetValue("map", out SessionProperty value) && value.IsString
-            ? (string)value : "--";
+            ? FrontendLanguage.Translate(value) : "--";
         // Session discovery does not expose a per-room RTT. Never display fabricated latency.
         ping.text = "--";
         selectButton.onClick.RemoveAllListeners();

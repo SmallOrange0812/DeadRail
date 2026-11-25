@@ -113,28 +113,53 @@ public class TreadmillManager : NetworkBehaviour
             entryDoors = RouteLoop.trainTransform.GetComponent<TrainEntryDoors>();
         // 방장은 기지에서 정지한 상태와 자원 초기값을 한 번만 설정합니다.
         if (HasStateAuthority)
-        {
-            _networkedSpeed = 0f;
-            TargetSpeed = 0f;
-            ClosedEntryDoors = 0;
-            DoorClosure = Vector2.zero;
-            Fuel = Mathf.Max(0f, fuelCapacity);
-            Battery = Mathf.Max(0f, batteryCapacity);
-            _fuelCapacity = Mathf.Max(1f, fuelCapacity);
-            _batteryCapacity = Mathf.Max(1f, batteryCapacity);
-            IsBlackout = false;
-            BackupPowerRemaining = 0f;
-            CrankProgress = 0f;
-            NextCrankClockwise = true;
-            CrankStrokeSequence = 0;
-            LastCrankClockwise = true;
-            CrankUser = PlayerRef.None;
-        }
+            ResetTrainForRun();
 
         _hasSpawned = true;
     }
 
     internal const int AmmunitionPerPickup = 30;
+
+    internal void StopForDefeat()
+    {
+        if (!HasStateAuthority) return;
+        _networkedSpeed = 0f;
+        TargetSpeed = 0f;
+    }
+
+    internal void ResetTrainForRun()
+    {
+        if (!HasStateAuthority) return;
+        StopForDefeat();
+        ClosedEntryDoors = 0;
+        DoorClosure = Vector2.zero;
+        Fuel = Mathf.Max(0f, fuelCapacity);
+        Battery = Mathf.Max(0f, batteryCapacity);
+        _fuelCapacity = Mathf.Max(1f, fuelCapacity);
+        _batteryCapacity = Mathf.Max(1f, batteryCapacity);
+        MedicalKits = RepairKits = Ammunition = 0;
+        FarmingStop = FarmingStopPhase.Pending;
+        IsBlackout = false;
+        BackupPowerRemaining = 0f;
+        CrankProgress = 0f;
+        NextCrankClockwise = true;
+        CrankStrokeSequence = 0;
+        LastCrankClockwise = true;
+        CrankUser = PlayerRef.None;
+    }
+
+    internal float LoseCargoFuel(float units)
+    {
+        if (!HasStateAuthority) return 0f;
+        float lost = Mathf.Min(Fuel, units);
+        Fuel -= lost;
+        return lost;
+    }
+
+    internal void RecordRepairKitUsed()
+    {
+        if (HasStateAuthority) RepairKits = Mathf.Max(0, RepairKits - 1);
+    }
 
     internal bool CollectSupply(FarmingSupplyKind kind, float amount)
     {
@@ -331,8 +356,9 @@ public class TreadmillManager : NetworkBehaviour
 
     // ★ 추가됨: P1 해킹 퍼즐 성공 시 호출되어 기차 속도를 실제로 변경하는 네트워크 함수
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
-    public void Rpc_SetTrainSpeed(float newSpeed)
+    public void Rpc_SetTrainSpeed(float newSpeed, RpcInfo info = default)
     {
+        if (!PlayerMovement.CanPlayerUseRole(Runner, info, TrainRole.Driver)) return;
         if (float.IsNaN(newSpeed) || float.IsInfinity(newSpeed)) return;
         newSpeed = Mathf.Clamp(newSpeed, 0f, 100f);
         if (Fuel <= 0f && newSpeed > 0f)

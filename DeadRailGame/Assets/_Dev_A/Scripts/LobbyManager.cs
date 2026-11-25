@@ -1,5 +1,6 @@
 using UnityEngine;
 using Fusion;
+using Fusion.Sockets;
 using TMPro;
 using UnityEngine.SceneManagement;
 using System.Threading.Tasks;
@@ -7,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+using System.Text;
 
 public class LobbyManager : MonoBehaviour
 {
@@ -22,6 +24,7 @@ public class LobbyManager : MonoBehaviour
     public event Action<float, string> ProgressChanged;
     public event Action GameSceneReady;
     public event Action<string> ConnectionLost;
+    public event Action<string> RoomMessageReceived;
 
     public NetworkRunner Runner => _runner;
     public bool IsStarting => _isStarting;
@@ -38,6 +41,13 @@ public class LobbyManager : MonoBehaviour
     private bool _isStarting;
     private bool _inLobby;
     private bool _handedOff;
+    private bool _waitingRoom;
+    private bool _startingMatch;
+    private int _messageSequence;
+    private const int ChatChannel = 0x44524348;
+    private const int RosterChannel = 0x44525354;
+    internal LobbyRoleRoster RoleRoster { get; private set; }
+    private float _nextRosterCheck;
 
     public async void OnClickCreateRoom()
     {
@@ -95,9 +105,14 @@ public class LobbyManager : MonoBehaviour
         }
     }
 
-    public async Task<bool> StartRoomAsync(GameMode mode, string roomName, int playerCount)
+    public async Task<bool> StartRoomAsync(GameMode mode, string roomName, int playerCount, bool waitInRoom = false)
     {
         if (_isStarting || (_runner != null && _runner.IsRunning)) return false;
+        if (mode == GameMode.Host && playerCount != 2 && playerCount != 4)
+        {
+            LastError = "Choose a room for 2 or 4 players.";
+            return false;
+        }
         _isStarting = true;
         LastError = null;
         int generation = _generation;
@@ -109,26 +124,35 @@ public class LobbyManager : MonoBehaviour
             int sceneIndex = SceneUtility.GetBuildIndexByScenePath(GameScenePath);
             if (sceneIndex < 0) throw new InvalidOperationException("The game scene is not in Build Settings.");
             EnsureRunner();
+            _waitingRoom = waitInRoom;
+            _startingMatch = false;
             ProgressChanged?.Invoke(0.15f, "Connecting to server...");
             var sceneManager = _runner.GetComponent<NetworkSceneManagerDefault>();
             if (sceneManager == null) sceneManager = _runner.gameObject.AddComponent<NetworkSceneManagerDefault>();
-            var result = await _runner.StartGame(new StartGameArgs
+            var args = new StartGameArgs
             {
                 GameMode = mode,
                 SessionName = roomName.Trim(),
-                Scene = SceneRef.FromIndex(sceneIndex),
                 SceneManager = sceneManager,
-                PlayerCount = mode == GameMode.Host ? Mathf.Clamp(playerCount, 2, 4) : (int?)null,
+                PlayerCount = mode == GameMode.Host ? playerCount : (int?)null,
                 IsVisible = true,
                 IsOpen = true,
                 EnableClientSessionCreation = false,
                 SessionProperties = mode == GameMode.Host
                     ? new Dictionary<string, SessionProperty> { { "map", "Depot" } } : null,
                 StartGameCancellationToken = _cancellation.Token
-            });
+            };
+            if (!waitInRoom) args.Scene = SceneRef.FromIndex(sceneIndex);
+            var result = await _runner.StartGame(args);
             if (generation != _generation || this == null) return false;
             connected = result.Ok;
             if (!connected) LastError = FriendlyFailure(result.ShutdownReason);
+            else if (waitInRoom)
+            {
+                _nextRosterCheck = 0f;
+                if (_runner.IsServer) RefreshRoleRoster(true);
+                else SendSeatRequest(0);
+            }
             return connected;
         }
         catch (OperationCanceledException) { return false; }
@@ -151,6 +175,145 @@ public class LobbyManager : MonoBehaviour
         }
     }
 
+    public bool StartWaitingMatch()
+    {
+        if (!_waitingRoom || _startingMatch || _runner == null || !_runner.IsRunning || !_runner.IsServer)
+            return false;
+        int sceneIndex = SceneUtility.GetBuildIndexByScenePath(GameScenePath);
+        if (sceneIndex < 0) return false;
+
+        RefreshRoleRoster(false);
+        _startingMatch = true;
+        try
+        {
+            _runner.SessionInfo.IsOpen = false;
+            _runner.LoadScene(SceneRef.FromIndex(sceneIndex), LoadSceneMode.Single);
+            return true;
+        }
+        catch (Exception exception)
+        {
+            _startingMatch = false;
+            _runner.SessionInfo.IsOpen = true;
+            Debug.LogWarning($"[Lobby] {exception.Message}");
+            return false;
+        }
+    }
+
+    private void Update()
+    {
+        if (!_waitingRoom || _startingMatch || _runner == null || !_runner.IsRunning || !_runner.IsServer ||
+            Time.unscaledTime < _nextRosterCheck) return;
+        _nextRosterCheck = Time.unscaledTime + 0.2f;
+        RefreshRoleRoster(false);
+    }
+
+    internal void SelectRoleCard(int card)
+    {
+        if (!_waitingRoom || _startingMatch || _runner == null || !_runner.IsRunning || card < 1 || card > 4)
+            return;
+        if (_runner.IsServer) MovePlayerToCard(_runner.LocalPlayer, card);
+        else SendSeatRequest(card);
+    }
+
+    private void SendSeatRequest(int card)
+    {
+        _runner.SendReliableDataToServer(ReliableKey.FromInts(RosterChannel, ++_messageSequence, 0, 0),
+            new[] { (byte)card });
+    }
+
+    private void MovePlayerToCard(PlayerRef player, int card)
+    {
+        RefreshRoleRoster(false);
+        int limit = _runner.SessionInfo.MaxPlayers;
+        if (card == 0)
+        {
+            BroadcastRoleRoster();
+            return;
+        }
+        if ((limit == 2 || limit == 4) && RoleRoster.SeatOf(player) != 0 &&
+            RoleRoster.TryMove(player, LobbyRoleRoster.SeatForCard(card, limit), limit))
+            BroadcastRoleRoster();
+    }
+
+    private void RefreshRoleRoster(bool force)
+    {
+        int limit = _runner.SessionInfo.MaxPlayers;
+        if (limit != 2 && limit != 4) return;
+        bool changed = RoleRoster.Reconcile(_runner.ActivePlayers.ToArray(), _runner.LocalPlayer, limit);
+        if (changed || force) BroadcastRoleRoster();
+    }
+
+    private void BroadcastRoleRoster()
+    {
+        byte[] data = RoleRoster.Serialize();
+        foreach (PlayerRef player in _runner.ActivePlayers)
+            if (player != _runner.LocalPlayer)
+                _runner.SendReliableDataToPlayer(player, ReliableKey.FromInts(RosterChannel, ++_messageSequence, 1, 0), data);
+    }
+
+    public void SendRoomMessage(string message)
+    {
+        if (!_waitingRoom || _startingMatch || _runner == null || !_runner.IsRunning) return;
+        message = CleanMessage(message);
+        if (message.Length == 0) return;
+        if (_runner.IsServer) BroadcastRoomMessage(_runner.LocalPlayer, message);
+        else _runner.SendReliableDataToServer(NextMessageKey(), Encoding.UTF8.GetBytes(message));
+    }
+
+    private static string CleanMessage(string text) =>
+        new string(text.Where(c => !char.IsControl(c)).Take(120).ToArray()).Trim();
+
+    private ReliableKey NextMessageKey(bool broadcast = false) =>
+        ReliableKey.FromInts(ChatChannel, ++_messageSequence, broadcast ? 1 : 0, 0);
+
+    private void ReceiveRoomMessage(NetworkRunner runner, PlayerRef sender, ReliableKey key, byte[] data)
+    {
+        key.GetInts(out int channel, out _, out int broadcast, out _);
+        if (runner != _runner || !_waitingRoom || _startingMatch ||
+            data == null || data.Length == 0 || data.Length > 512)
+            return;
+        if (channel == RosterChannel)
+        {
+            if (runner.IsServer)
+            {
+                if (broadcast == 0 && data.Length == 1 && data[0] <= 4 && runner.ActivePlayers.Contains(sender))
+                    MovePlayerToCard(sender, data[0]);
+            }
+            else if (broadcast == 1 && IsHostMessage(runner, sender))
+            {
+                RoleRoster.ApplySnapshot(data);
+            }
+            return;
+        }
+        if (channel != ChatChannel) return;
+        string message = Encoding.UTF8.GetString(data);
+        if (!runner.IsServer)
+        {
+            if (broadcast == 1 && IsHostMessage(runner, sender))
+                RoomMessageReceived?.Invoke(message);
+            return;
+        }
+        if (broadcast != 0 || !runner.ActivePlayers.Contains(sender)) return;
+        message = CleanMessage(message);
+        if (message.Length > 0) BroadcastRoomMessage(sender, message);
+    }
+
+    private static bool IsHostMessage(NetworkRunner runner, PlayerRef sender) =>
+        sender == PlayerRef.None || sender == runner.ActivePlayers.OrderBy(player => player.PlayerId).FirstOrDefault();
+
+    private void BroadcastRoomMessage(PlayerRef sender, string message)
+    {
+        if (RoleRoster.SeatOf(sender) == 0) RefreshRoleRoster(false);
+        int slot = RoleRoster.SeatOf(sender);
+        string roleName = LobbyRoleRoster.RoleDisplayName(LobbyRoleRoster.RolesForSeat(slot, _runner.SessionInfo.MaxPlayers));
+        if (roleName == null) return;
+        string line = $"{roleName}: {message}";
+        RoomMessageReceived?.Invoke(line);
+        byte[] bytes = Encoding.UTF8.GetBytes(line);
+        foreach (PlayerRef player in _runner.ActivePlayers)
+            if (player != _runner.LocalPlayer) _runner.SendReliableDataToPlayer(player, NextMessageKey(true), bytes);
+    }
+
     public async Task CancelAsync()
     {
         ++_generation;
@@ -163,6 +326,8 @@ public class LobbyManager : MonoBehaviour
         _browseTask = null;
         _sessions.Clear();
         _inLobby = false;
+        _waitingRoom = false;
+        _startingMatch = false;
     }
 
     public void HandOffToGame()
@@ -178,6 +343,7 @@ public class LobbyManager : MonoBehaviour
         _cancellation?.Dispose();
         _cancellation = new CancellationTokenSource();
         _runner = Instantiate(runnerPrefab);
+        RoleRoster = _runner.gameObject.AddComponent<LobbyRoleRoster>();
         _runner.name = "DeadRail Session";
         _runner.ProvideInput = true;
         _events = _runner.GetComponent<NetworkEvents>();
@@ -188,11 +354,13 @@ public class LobbyManager : MonoBehaviour
         _events.OnSceneLoadStart ??= new NetworkEvents.RunnerEvent();
         _events.OnSceneLoadDone ??= new NetworkEvents.RunnerEvent();
         _events.OnShutdown ??= new NetworkEvents.ShutdownEvent();
+        _events.OnReliableData ??= new NetworkEvents.ReliableDataEvent();
         _events.OnSessionListUpdate.AddListener(ReceiveSessions);
         _events.OnConnectedToServer.AddListener(ConnectedToServer);
         _events.OnSceneLoadStart.AddListener(SceneLoadStarted);
         _events.OnSceneLoadDone.AddListener(SceneLoadFinished);
         _events.OnShutdown.AddListener(RunnerStopped);
+        _events.OnReliableData.AddListener(ReceiveRoomMessage);
         if (added) _runner.AddCallbacks(_events);
     }
 
@@ -200,7 +368,7 @@ public class LobbyManager : MonoBehaviour
     {
         if (runner != _runner) return;
         _sessions.Clear();
-        _sessions.AddRange(sessions.Where(session => session.IsVisible)
+        _sessions.AddRange(sessions.Where(session => session.IsVisible && (session.MaxPlayers == 2 || session.MaxPlayers == 4))
             .OrderBy(session => session.Name, StringComparer.OrdinalIgnoreCase));
         PublishSessions();
     }
@@ -223,7 +391,7 @@ public class LobbyManager : MonoBehaviour
 
     private void SceneLoadFinished(NetworkRunner runner)
     {
-        if (runner != _runner) return;
+        if (runner != _runner || !SceneManager.GetSceneByPath(GameScenePath).isLoaded) return;
         ProgressChanged?.Invoke(0.9f, "Preparing your player...");
         GameSceneReady?.Invoke();
     }
@@ -247,6 +415,7 @@ public class LobbyManager : MonoBehaviour
         NetworkRunner runner = _runner;
         DetachListeners();
         _runner = null;
+        RoleRoster = null;
         _inLobby = false;
         if (runner == null) return;
         try { await runner.Shutdown(); }
@@ -261,6 +430,7 @@ public class LobbyManager : MonoBehaviour
         _events.OnSceneLoadStart?.RemoveListener(SceneLoadStarted);
         _events.OnSceneLoadDone?.RemoveListener(SceneLoadFinished);
         _events.OnShutdown?.RemoveListener(RunnerStopped);
+        _events.OnReliableData?.RemoveListener(ReceiveRoomMessage);
         // The gameplay NetworkManager reuses NetworkEvents. Do not unregister its callbacks.
         _events = null;
     }

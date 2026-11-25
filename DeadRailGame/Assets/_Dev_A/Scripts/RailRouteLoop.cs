@@ -5,11 +5,12 @@ using UnityEngine.Playables;
 using UnityEngine.UI;
 
 public enum RailRoute { Left, Straight, Right }
+public enum RailEntryOutcome { Normal, CargoDamaged, Blackout }
 public enum FarmingSupplyKind { RouteCapacity, FuelCapacity, BatteryCapacity, MedicalKit, RepairKit, Ammunition, Fuel, Battery }
 public enum RailTravelPhase { Cruise, Junction, EntryTransition, Approach, Farming, MissedStop, ExitTransition, ReapproachTransition, Departing }
 
 /// <summary>Authority owns route progress. Each peer presents the same authored track around a stationary train.</summary>
-public sealed class RailRouteLoop : NetworkBehaviour
+public sealed partial class RailRouteLoop : NetworkBehaviour
 {
     [Header("Authored layout")]
     public Transform junctionGeometry;
@@ -63,7 +64,9 @@ public sealed class RailRouteLoop : NetworkBehaviour
     [Networked] public int PlayerCount { get; private set; }
     [Networked] public NetworkBool DepartureWaiting { get; private set; }
     [Networked] public int ActiveMapIndex { get; private set; }
+    [Networked] private int ActiveMapDanger { get; set; }
     [Networked] public NetworkBool BranchEntryFailed { get; private set; }
+    [Networked] private RailEntryOutcome EntryOutcome { get; set; }
 
     public static RailRouteLoop Instance { get; private set; }
     public bool Ready => Object != null && Object.IsValid;
@@ -116,14 +119,7 @@ public sealed class RailRouteLoop : NetworkBehaviour
     public override void Spawned()
     {
         if (HasStateAuthority)
-        {
-            Phase = RailTravelPhase.Cruise;
-            PhaseDistance = cruisingDistance;
-            SelectedRoute = RailRoute.Straight;
-            VisitNumber = 1;
-            ActiveMapIndex = -1;
-            LockedRoute = RailRoute.Left;
-        }
+            ResetRouteForRun();
         BuildOverlay();
         Render();
     }
@@ -131,9 +127,13 @@ public sealed class RailRouteLoop : NetworkBehaviour
     public override void FixedUpdateNetwork()
     {
         if (!HasStateAuthority) return;
-        RefreshCollisionGeometry();
-        CountPlayers();
         TreadmillManager train = TreadmillManager.Instance;
+        UpdateDefeat(train);
+        if (Defeated) return;
+        RefreshCollisionGeometry();
+        UpdateCargoCarrier();
+        SimulateZombies();
+        CountPlayers();
         float deltaTime = Runner.DeltaTime;
         if (IsTransition)
         {
@@ -179,9 +179,13 @@ public sealed class RailRouteLoop : NetworkBehaviour
                 {
                     MapNodeManager nodes = MapNodeManager.Instance;
                     SectorNodeData selected = nodes.GetRouteNode(SelectedRoute);
-                    BranchEntryFailed = SelectedRoute == RailRoute.Straight || train.CurrentSpeed != selected.requiredSpeed;
+                    EntryOutcome = EvaluateEntry(SelectedRoute, train.CurrentSpeed, selected.requiredSpeed);
+                    BranchEntryFailed = EntryOutcome == RailEntryOutcome.Blackout;
+                    if (EntryOutcome == RailEntryOutcome.CargoDamaged) DamageCargoDoor(35);
                     LockedRoute = BranchEntryFailed ? RailRoute.Straight : SelectedRoute;
-                    ActiveMapIndex = nodes.GetRouteNode(LockedRoute).mapIndex;
+                    SectorNodeData destination = nodes.GetRouteNode(LockedRoute);
+                    ActiveMapIndex = destination.mapIndex;
+                    ActiveMapDanger = destination.dangerLevel;
                     Phase = RailTravelPhase.Junction;
                     PhaseDistance = 0f;
                 }
@@ -228,9 +232,10 @@ public sealed class RailRouteLoop : NetworkBehaviour
 
     public bool TrySetSpeed(float speed)
     {
-        if (IsTransition || Phase == RailTravelPhase.Approach) return false;
+        if (Defeated || IsTransition || Phase == RailTravelPhase.Approach) return false;
         if (Phase == RailTravelPhase.Departing) return speed > 0f;
         if (Phase != RailTravelPhase.Farming || speed <= 0f) return true;
+        if (FirstDefensePending()) return false;
         CountPlayers();
         DepartureWaiting = PlayersAboard < PlayerCount;
         if (DepartureWaiting) return false;
@@ -257,9 +262,10 @@ public sealed class RailRouteLoop : NetworkBehaviour
     }
 
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
-    public void Rpc_Reapproach()
+    public void Rpc_Reapproach(RpcInfo info = default)
     {
-        if (Phase != RailTravelPhase.MissedStop) return;
+        if (Phase != RailTravelPhase.MissedStop ||
+            !PlayerMovement.CanPlayerUseRole(Runner, info, TrainRole.Driver)) return;
         StartTransition(RailTravelPhase.ReapproachTransition);
     }
 
@@ -274,8 +280,20 @@ public sealed class RailRouteLoop : NetworkBehaviour
         TreadmillManager train = TreadmillManager.Instance;
         FarmingSupplyKind kind = GetSupplyKind(index);
         bool personalSupply = kind is FarmingSupplyKind.MedicalKit or FarmingSupplyKind.RepairKit or FarmingSupplyKind.Ammunition;
-        PlayerMovement collector = null;
-        if (personalSupply && (!player.TryGetComponent(out collector) || !collector.HasStateAuthority)) return;
+        if (!player.TryGetComponent(out PlayerMovement collector) || collector.IsDowned ||
+            (personalSupply && !collector.HasStateAuthority)) return;
+        if (VisitNumber == 1 && kind == FarmingSupplyKind.Fuel)
+        {
+            if (CargoFuelCarrier != PlayerRef.None || FirstFuelDelivered) return;
+            CargoFuelCarrier = sender;
+            if (!FuelDefenseTriggered)
+            {
+                FuelDefenseTriggered = true;
+                DefenseDelay = TickTimer.CreateFromSeconds(Runner, 10f);
+            }
+            CollectedSupplies |= 1 << index;
+            return;
+        }
         float amount = kind == FarmingSupplyKind.FuelCapacity || kind == FarmingSupplyKind.BatteryCapacity ? capacityUpgradeAmount : supplyAmount;
         if (train == null || !train.CollectSupply(kind, amount)) return;
         if (personalSupply) collector.RecordInventoryPickup(kind);
@@ -299,7 +317,7 @@ public sealed class RailRouteLoop : NetworkBehaviour
             case FarmingSupplyKind.MedicalKit: return "치료품 +1";
             case FarmingSupplyKind.RepairKit: return "수리품 +1";
             case FarmingSupplyKind.Ammunition: return "탄약 +30";
-            case FarmingSupplyKind.Fuel: return $"연료 +{supplyAmount:F0}";
+            case FarmingSupplyKind.Fuel: return VisitNumber == 1 ? "운반용 연료통" : $"연료 +{supplyAmount:F0}";
             case FarmingSupplyKind.Battery: return $"배터리 +{supplyAmount:F0}";
             default: return "보급품";
         }
@@ -399,19 +417,20 @@ public sealed class RailRouteLoop : NetworkBehaviour
                 if (SelectedRoute == RailRoute.Straight)
                     return $"분기까지 {distance} · {RouteName(SelectedRoute)}";
                 SectorNodeData selected = MapNodeManager.Instance.GetRouteNode(SelectedRoute);
-                return $"분기까지 {distance} · {RouteName(SelectedRoute)}\n{selected.sectorName} · 요구 속도 {selected.requiredSpeed} km/h";
+                return $"분기까지 {distance} · {RouteName(SelectedRoute)}\n{selected.sectorName} · 안전 속도는 탐조등 표지판 확인";
             case RailTravelPhase.Junction:
                 if (BranchEntryFailed)
                 {
-                    string reason = SelectedRoute == RailRoute.Straight ? "선로 미선택" : "요구 속도 불일치";
+                    string reason = SelectedRoute == RailRoute.Straight ? "선로 미선택" : "진입 속도 오차 15 km/h 초과";
                     return $"{reason} · 중앙 블랙아웃 → {MapNodeManager.GetMapName(ActiveMapIndex)}";
                 }
-                return $"{MapNodeManager.GetMapName(ActiveMapIndex)} 진입 · {RouteName(LockedRoute)}";
+                return $"{MapNodeManager.GetMapName(ActiveMapIndex)} 진입 · " +
+                    (EntryOutcome == RailEntryOutcome.CargoDamaged ? "속도 오차로 화물문 손상" : RouteName(LockedRoute));
             case RailTravelPhase.Approach:
                 if (TreadmillManager.Instance.Fuel <= 0f) return "연료 부족 · 연료 보충 후 자동 정차를 재개합니다";
                 return $"{MapNodeManager.GetMapName(ActiveMapIndex)} 자동 정차 · 정차 지점까지 {PhaseDistance:F0} m";
             case RailTravelPhase.Farming:
-                return $"{MapNodeManager.GetMapName(ActiveMapIndex)} 정차 · {(IsBlackout ? "블랙아웃 지하 파밍 · 터널 내부" : RouteName(LockedRoute))}\n탑승 {PlayersAboard}/{PlayerCount}" + (DepartureWaiting ? " · 팀원 탑승 후 출발 가능" : " · 보급품 근처 [E]로 회수");
+                return $"{MapNodeManager.GetMapName(ActiveMapIndex)} 정차 · {(IsBlackout ? "블랙아웃 지하 파밍 · 터널 내부" : RouteName(LockedRoute))}\n탑승 {PlayersAboard}/{PlayerCount}" + (DepartureWaiting ? " · 팀원 탑승 후 출발 가능" : " · 보급품 근처 [F]로 회수");
             case RailTravelPhase.Departing:
                 return $"{MapNodeManager.GetMapName(ActiveMapIndex)} 출발 중";
             case RailTravelPhase.MissedStop: return "정차 구간을 지났습니다 · P1 재접근 버튼";
@@ -423,6 +442,11 @@ public sealed class RailRouteLoop : NetworkBehaviour
     {
         if (!Ready || junctionGeometry == null || farmingGeometry == null) return;
         RefreshCollisionGeometry();
+        RenderZombies();
+        RenderCarriedFuel();
+        RenderCargoDoorMarker();
+        RenderEntrySpeedSign();
+        RenderRunResult();
         for (int i = 0; farmingGeometry.gameObject.activeInHierarchy && i < supplyPoints.Length; i++)
         {
             bool available = (CollectedSupplies & (1 << i)) == 0;
@@ -446,8 +470,12 @@ public sealed class RailRouteLoop : NetworkBehaviour
         if (hudText != null)
         {
             hudText.text = $"구간 {VisitNumber} · {TravelStatus()}";
+            if (Phase == RailTravelPhase.Farming || CargoDoorHealth < CargoDoorMaxHealth)
+                hudText.text += $"\n{CargoStatus()}";
+            string cargoPrompt = CargoPrompt();
+            if (!string.IsNullOrEmpty(cargoPrompt)) hudText.text += $"\n{cargoPrompt}";
             if (Phase == RailTravelPhase.Farming && nearbySupply >= 0 && (CollectedSupplies & (1 << nearbySupply)) == 0)
-                hudText.text += $"\n[E] {SupplyName(nearbySupply)} 회수";
+                hudText.text += $"\n[F] {SupplyName(nearbySupply)} {(VisitNumber == 1 && GetSupplyKind(nearbySupply) == FarmingSupplyKind.Fuel ? "들기" : "회수")}";
             TreadmillManager train = TreadmillManager.Instance;
             if (train != null && train.HasSpawned && train.IsBlackout)
             {
@@ -495,14 +523,24 @@ public sealed class RailRouteLoop : NetworkBehaviour
         nearbySupply = -1;
         if (!Ready || Phase != RailTravelPhase.Farming || (TerminalUIManager.Instance != null && TerminalUIManager.Instance.BlocksPlayerInput)) return;
         PlayerRef local = Runner.LocalPlayer;
-        if (!Runner.TryGetPlayerObject(local, out NetworkObject player) || IsAboard(player.transform.position)) return;
+        if (!Runner.TryGetPlayerObject(local, out NetworkObject player) || IsAboard(player.transform.position) ||
+            !player.TryGetComponent<PlayerMovement>(out var movement) || movement.IsDowned) return;
         for (int i = 0; i < supplyPoints.Length; i++)
         {
             if ((CollectedSupplies & (1 << i)) != 0 || Vector3.Distance(player.transform.position, supplyPoints[i].position) > 3f) continue;
             nearbySupply = i;
-            if (Input.GetKeyDown(KeyCode.E)) Rpc_CollectSupply(i);
             break;
         }
+    }
+
+    internal bool TryCollectNearbySupply(PlayerMovement player)
+    {
+        if (!Ready || Phase != RailTravelPhase.Farming || nearbySupply < 0 ||
+            IsAboard(player.transform.position) || Vector3.Distance(player.transform.position, supplyPoints[nearbySupply].position) > 3f)
+            return false;
+
+        Rpc_CollectSupply(nearbySupply);
+        return true;
     }
 
     private void PresentTransition()
@@ -608,7 +646,7 @@ public sealed class RailRouteLoop : NetworkBehaviour
         rect.anchorMax = rect.anchorMin;
         rect.pivot = new Vector2(0.5f, 1f);
         rect.anchoredPosition = new Vector2(0f, -18f);
-        rect.sizeDelta = new Vector2(950f, 100f);
+        rect.sizeDelta = new Vector2(950f, 155f);
         label.AddComponent<Outline>().effectColor = Color.black;
         GameObject fade = new GameObject("Blackout fade", typeof(RectTransform), typeof(Image));
         fade.transform.SetParent(overlay.transform, false);
@@ -655,6 +693,7 @@ public sealed class RailRouteLoop : NetworkBehaviour
 
     private void OnDestroy()
     {
+        DestroyCombatVisuals();
         if (cinematicPlaying) EndCinematic();
         if (Instance == this) Instance = null;
     }

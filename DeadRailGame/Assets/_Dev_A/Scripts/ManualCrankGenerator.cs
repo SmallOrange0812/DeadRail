@@ -62,7 +62,7 @@ public sealed class ManualCrankGenerator : MonoBehaviour
 
         if (_activePlayer != null)
         {
-            if (!_powerManager.IsBlackout ||
+            if (_activePlayer.IsDowned || !_powerManager.IsBlackout ||
                 _powerManager.BackupPowerRemaining > 0f ||
                 Vector3.Distance(_activePlayer.transform.position, interactionPoint.position) > GetCrankInteractionDistance())
             {
@@ -70,19 +70,28 @@ public sealed class ManualCrankGenerator : MonoBehaviour
                 return;
             }
 
-            UpdateCrankInput();
+            if (!GamePauseMenu.BlocksGameplayInput || Input.GetKeyDown(KeyCode.Escape))
+                UpdateCrankInput();
             return;
         }
 
         _nearbyLocalPlayer = FindNearbyLocalPlayer();
-        if (_nearbyLocalPlayer == null || !_powerManager.IsBlackout ||
-            _powerManager.BackupPowerRemaining > 0f ||
-            (_powerManager.CrankUser != PlayerRef.None &&
-             GetPlayerReference(_nearbyLocalPlayer) != _powerManager.CrankUser))
-            return;
+    }
 
-        if (Input.GetKeyDown(KeyCode.E) && !_nearbyLocalPlayer.isUsingTerminal)
-            BeginMinigame(_nearbyLocalPlayer);
+    internal static bool TryInteract(PlayerMovement player)
+    {
+        foreach (ManualCrankGenerator crank in FindObjectsByType<ManualCrankGenerator>(FindObjectsSortMode.None))
+        {
+            if (crank._nearbyLocalPlayer != player || crank._activePlayer != null ||
+                crank._powerManager == null || !crank._powerManager.HasSpawned ||
+                !crank._powerManager.IsBlackout || crank._powerManager.BackupPowerRemaining > 0f ||
+                (crank._powerManager.CrankUser != PlayerRef.None &&
+                 GetPlayerReference(player) != crank._powerManager.CrankUser))
+                continue;
+            crank.BeginMinigame(player);
+            return true;
+        }
+        return false;
     }
 
     private PlayerMovement FindNearbyLocalPlayer()
@@ -314,7 +323,7 @@ public sealed class ManualCrankGenerator : MonoBehaviour
         if (_activePlayer == null)
         {
             if (_nearbyLocalPlayer != null && !_nearbyLocalPlayer.isUsingTerminal)
-                DrawPrompt("[E] 수동 크랭크 발전기 사용");
+                DrawPrompt("[F] 수동 크랭크 발전기 사용");
             return;
         }
 

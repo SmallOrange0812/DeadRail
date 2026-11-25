@@ -1,5 +1,4 @@
 using UnityEngine;
-using UnityEngine.InputSystem;
 using Fusion;
 
 public class FlashlightToggle : NetworkBehaviour
@@ -36,21 +35,9 @@ public class FlashlightToggle : NetworkBehaviour
         }
     }
 
-    private void Update()
+    internal void SetPersonalLight(bool on)
     {
-        if (Object == null || !Object.IsValid || player == null || !player.IsLocalPlayer ||
-            UsesSearchlight || player.isUsingTerminal || player.IsClimbingLadder) return;
-        if (RailRouteLoop.Instance != null && RailRouteLoop.Instance.Ready && RailRouteLoop.Instance.IsTransition) return;
-
-        if (Keyboard.current != null && Keyboard.current.fKey.wasPressedThisFrame)
-            Rpc_ToggleFlashlight();
-    }
-
-    [Rpc(RpcSources.InputAuthority | RpcSources.StateAuthority, RpcTargets.StateAuthority)]
-    private void Rpc_ToggleFlashlight()
-    {
-        if (!UsesSearchlight && (IsLightOn || HasBattery))
-            IsLightOn = !IsLightOn;
+        if (HasStateAuthority) IsLightOn = on && !UsesSearchlight && HasBattery;
     }
 
     private void LateUpdate()

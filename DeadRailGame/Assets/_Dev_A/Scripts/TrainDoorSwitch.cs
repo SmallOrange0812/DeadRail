@@ -18,7 +18,7 @@ public sealed class TrainDoorSwitch : MonoBehaviour
             TreadmillManager train = TreadmillManager.Instance;
             if (train == null || !train.HasSpawned) return string.Empty;
             if (train.EntryDoorsLocked) return "정차 후 출입문 조작 가능";
-            return opensDoor ? "[E]  출입문 열기" : "[E]  출입문 닫기";
+            return opensDoor ? "[F]  출입문 열기" : "[F]  출입문 닫기";
         }
     }
 

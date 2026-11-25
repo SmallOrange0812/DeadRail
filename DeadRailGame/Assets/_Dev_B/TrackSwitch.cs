@@ -83,7 +83,7 @@ public class TrackSwitch : NetworkBehaviour
         }
 
         // 실제 방향 변경은 StateAuthority에서 처리합니다.
-        manager.Rpc_ToggleTrackSwitch();
+        manager.ApplyTrackSwitchHit();
     }
 
     public override void Render()

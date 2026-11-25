@@ -52,7 +52,7 @@ public class RaycastWeapon : NetworkBehaviour
 
     private void Update()
     {
-        if (!HasStateAuthority) return;
+        if (GamePauseMenu.BlocksGameplayInput || !HasStateAuthority) return;
         if (!hasWeapon) return;
 
         if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)

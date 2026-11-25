@@ -49,13 +49,6 @@ public class P4RadarUI : MonoBehaviour
             sweepLine.Rotate(0f, 0f, -sweepSpeed * Time.deltaTime);
         }
 
-        // Input must be checked every frame so the debug key cannot be missed
-        // by the slower UI refresh cadence below.
-        if (Input.GetKeyDown(KeyCode.R) && MapNodeManager.Instance != null)
-        {
-            MapNodeManager.Instance.Rpc_ForceRescanBranch();
-        }
-
         // 레이더 오브젝트 검색과 브리핑 갱신은 10Hz면 충분합니다.
         // 매 프레임 전체 오브젝트 검색과 문자열 재생성을 하지 않도록 제한합니다.
         if (Time.unscaledTime < _nextUiRefreshTime) return;
@@ -83,9 +76,9 @@ public class P4RadarUI : MonoBehaviour
                 $"{route.TravelStatus()}\n" +
                 $"연료 {train.Fuel:F1}/{train.FuelCapacity:F0} · 배터리 {train.Battery:F1}/{train.BatteryCapacity:F0}\n" +
                 $"치료품 {train.MedicalKits} · 수리품 {train.RepairKits} · 탄약 {train.Ammunition}\n탑승 {route.PlayersAboard}/{route.PlayerCount}\n\n" +
-                $"◀ {left.sectorName} · {left.requiredSpeed} km/h\n연료 최대 용량 +{route.capacityUpgradeAmount:F0}\n" +
-                $"▶ {right.sectorName} · {right.requiredSpeed} km/h\n배터리 최대 용량 +{route.capacityUpgradeAmount:F0}\n\n" +
-                "P3 적중으로 왼쪽 → 미선택 → 오른쪽 전환\n미선택 또는 요구 속도 불일치 시 중앙 블랙아웃\n" +
+                $"◀ {left.sectorName}\n연료 최대 용량 +{route.capacityUpgradeAmount:F0}\n" +
+                $"▶ {right.sectorName}\n배터리 최대 용량 +{route.capacityUpgradeAmount:F0}\n\n" +
+                "안전 진입 속도는 P2 탐조등 표지판에서 확인\n속도 오차 5 초과~15 km/h: 화물문 손상\n미선택 또는 15 km/h 초과: 블랙아웃\n" +
                 "모든 맵에서 치료품·수리품·탄약·자원 파밍";
             return;
         }

@@ -16,6 +16,14 @@ public class ConsoleInteractable : MonoBehaviour
         _ => "P4 전방 레이더 관제 콘솔"
     };
 
+    internal TrainRole RequiredRole => consoleType switch
+    {
+        ConsoleType.P1_DriveCinsole => TrainRole.Driver,
+        ConsoleType.P2_SearchlightConsole => TrainRole.Searchlight,
+        ConsoleType.P4_RadarConsole => TrainRole.Radar,
+        _ => TrainRole.None
+    };
+
     public static bool IsConsoleNearestInteraction(PlayerMovement player) => FindAimedConsole(player) != null;
 
     internal static ConsoleInteractable FindAimedConsole(PlayerMovement player)
@@ -28,6 +36,7 @@ public class ConsoleInteractable : MonoBehaviour
     {
         ConsoleInteractable console = hit.collider.GetComponentInParent<ConsoleInteractable>();
         return console != null && console.isActiveAndEnabled
+            && player.HasRole(console.RequiredRole)
             && Vector3.Distance(player.fpsCamera.transform.position, hit.point) <= console.interactDistance
             ? console
             : null;

@@ -201,7 +201,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a09ce10e0c6e2e54ea9dbfa7c3c6911a, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TreadmillScenery
   despawnZ: -16
   totalTrackLength: 128
@@ -339,7 +339,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -2204794849235753422, guid: 0ff344499384ad544acadf64e90ea262, type: 3}
       propertyPath: 'm_Materials.Array.data[2]'
-      value:
+      value: 
       objectReference: {fileID: 4945439069321849329, guid: fba8a2382f1b79846b20ca3970176df2, type: 2}
     - target: {fileID: 919132149155446097, guid: 0ff344499384ad544acadf64e90ea262, type: 3}
       propertyPath: m_Name
@@ -814,7 +814,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2db31d2fe0de0f242a0552adf79124f8, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TrainDoorSwitch
   doorIndex: 1
   opensDoor: 0
@@ -921,7 +921,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a09ce10e0c6e2e54ea9dbfa7c3c6911a, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TreadmillScenery
   despawnZ: -16
   totalTrackLength: 128
@@ -1518,7 +1518,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 474bcb49853aa07438625e644c072ee6, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalLightData
   m_UsePipelineSettings: 1
   m_AdditionalLightsShadowResolutionTier: 2
@@ -2839,7 +2839,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2db31d2fe0de0f242a0552adf79124f8, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TrainDoorSwitch
   doorIndex: 1
   opensDoor: 1
@@ -3059,6 +3059,7 @@ GameObject:
   m_Component:
   - component: {fileID: 83277332}
   - component: {fileID: 83277333}
+  - component: {fileID: 83277334}
   m_Layer: 0
   m_Name: Warning light spill
   m_TagString: Untagged
@@ -3146,6 +3147,35 @@ Light:
   m_LightUnit: 1
   m_LuxAtDistance: 1
   m_EnableSpotReflector: 1
+--- !u!114 &83277334
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 83277331}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 474bcb49853aa07438625e644c072ee6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalLightData
+  m_UsePipelineSettings: 1
+  m_AdditionalLightsShadowResolutionTier: 2
+  m_CustomShadowLayers: 0
+  m_LightCookieSize: {x: 1, y: 1}
+  m_LightCookieOffset: {x: 0, y: 0}
+  m_SoftShadowQuality: 0
+  m_RenderingLayersMask:
+    serializedVersion: 0
+    m_Bits: 1
+  m_ShadowRenderingLayersMask:
+    serializedVersion: 0
+    m_Bits: 1
+  m_Version: 4
+  m_LightLayerMask: 1
+  m_ShadowLayerMask: 1
+  m_RenderingLayers: 1
+  m_ShadowRenderingLayers: 1
 --- !u!1 &83854648 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: -4927416053603043948, guid: 8c39e19aaf0f90745848273ffe7ed14d, type: 3}
@@ -3387,7 +3417,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -2204794849235753422, guid: 0ff344499384ad544acadf64e90ea262, type: 3}
       propertyPath: 'm_Materials.Array.data[2]'
-      value:
+      value: 
       objectReference: {fileID: 4945439069321849329, guid: fba8a2382f1b79846b20ca3970176df2, type: 2}
     - target: {fileID: 919132149155446097, guid: 0ff344499384ad544acadf64e90ea262, type: 3}
       propertyPath: m_Name
@@ -5043,7 +5073,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a09ce10e0c6e2e54ea9dbfa7c3c6911a, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TreadmillScenery
   despawnZ: -16
   totalTrackLength: 128
@@ -5798,6 +5828,7 @@ GameObject:
   m_Component:
   - component: {fileID: 160706069}
   - component: {fileID: 160706070}
+  - component: {fileID: 160706071}
   m_Layer: 0
   m_Name: Warning light spill
   m_TagString: Untagged
@@ -5885,6 +5916,35 @@ Light:
   m_LightUnit: 1
   m_LuxAtDistance: 1
   m_EnableSpotReflector: 1
+--- !u!114 &160706071
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 160706068}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 474bcb49853aa07438625e644c072ee6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalLightData
+  m_UsePipelineSettings: 1
+  m_AdditionalLightsShadowResolutionTier: 2
+  m_CustomShadowLayers: 0
+  m_LightCookieSize: {x: 1, y: 1}
+  m_LightCookieOffset: {x: 0, y: 0}
+  m_SoftShadowQuality: 0
+  m_RenderingLayersMask:
+    serializedVersion: 0
+    m_Bits: 1
+  m_ShadowRenderingLayersMask:
+    serializedVersion: 0
+    m_Bits: 1
+  m_Version: 4
+  m_LightLayerMask: 1
+  m_ShadowLayerMask: 1
+  m_RenderingLayers: 1
+  m_ShadowRenderingLayers: 1
 --- !u!1 &161466684 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: -7501931568487173484, guid: 8c39e19aaf0f90745848273ffe7ed14d, type: 3}
@@ -6959,7 +7019,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -2204794849235753422, guid: 0ff344499384ad544acadf64e90ea262, type: 3}
       propertyPath: 'm_Materials.Array.data[2]'
-      value:
+      value: 
       objectReference: {fileID: 4945439069321849329, guid: fba8a2382f1b79846b20ca3970176df2, type: 2}
     - target: {fileID: 919132149155446097, guid: 0ff344499384ad544acadf64e90ea262, type: 3}
       propertyPath: m_Name
@@ -7247,7 +7307,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -2204794849235753422, guid: e2e39161dde0a414193f9ec904afa1a2, type: 3}
       propertyPath: 'm_Materials.Array.data[2]'
-      value:
+      value: 
       objectReference: {fileID: 4945439069321849329, guid: fba8a2382f1b79846b20ca3970176df2, type: 2}
     - target: {fileID: 919132149155446097, guid: e2e39161dde0a414193f9ec904afa1a2, type: 3}
       propertyPath: m_Name
@@ -7528,7 +7588,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: b120aa1cfca2b3e438d772367a6f99b5, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TrainEntryDoors
   leftDoor: {fileID: 1070591827}
   rightDoor: {fileID: 1759613622}
@@ -7921,7 +7981,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -2204794849235753422, guid: 0ff344499384ad544acadf64e90ea262, type: 3}
       propertyPath: 'm_Materials.Array.data[2]'
-      value:
+      value: 
       objectReference: {fileID: 4945439069321849329, guid: fba8a2382f1b79846b20ca3970176df2, type: 2}
     - target: {fileID: 919132149155446097, guid: 0ff344499384ad544acadf64e90ea262, type: 3}
       propertyPath: m_Name
@@ -8881,7 +8941,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -2204794849235753422, guid: e2e39161dde0a414193f9ec904afa1a2, type: 3}
       propertyPath: 'm_Materials.Array.data[2]'
-      value:
+      value: 
       objectReference: {fileID: 4945439069321849329, guid: fba8a2382f1b79846b20ca3970176df2, type: 2}
     - target: {fileID: 919132149155446097, guid: e2e39161dde0a414193f9ec904afa1a2, type: 3}
       propertyPath: m_Name
@@ -9301,7 +9361,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -2204794849235753422, guid: 0ff344499384ad544acadf64e90ea262, type: 3}
       propertyPath: 'm_Materials.Array.data[2]'
-      value:
+      value: 
       objectReference: {fileID: 4945439069321849329, guid: fba8a2382f1b79846b20ca3970176df2, type: 2}
     - target: {fileID: 919132149155446097, guid: 0ff344499384ad544acadf64e90ea262, type: 3}
       propertyPath: m_Name
@@ -9759,7 +9819,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -2204794849235753422, guid: e2e39161dde0a414193f9ec904afa1a2, type: 3}
       propertyPath: 'm_Materials.Array.data[2]'
-      value:
+      value: 
       objectReference: {fileID: 4945439069321849329, guid: fba8a2382f1b79846b20ca3970176df2, type: 2}
     - target: {fileID: 919132149155446097, guid: e2e39161dde0a414193f9ec904afa1a2, type: 3}
       propertyPath: m_Name
@@ -10270,7 +10330,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 474bcb49853aa07438625e644c072ee6, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalLightData
   m_UsePipelineSettings: 1
   m_AdditionalLightsShadowResolutionTier: 2
@@ -11420,11 +11480,11 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: -9063646237186334789, guid: 3d8d2c33718c0b242b2d34b7fec7c4ac, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value:
+      value: 
       objectReference: {fileID: 2100000, guid: ee014e39ae2d878478fc41ed4dc0e829, type: 2}
     - target: {fileID: -8958785567205981141, guid: 3d8d2c33718c0b242b2d34b7fec7c4ac, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value:
+      value: 
       objectReference: {fileID: 2100000, guid: ee014e39ae2d878478fc41ed4dc0e829, type: 2}
     - target: {fileID: -8679921383154817045, guid: 3d8d2c33718c0b242b2d34b7fec7c4ac, type: 3}
       propertyPath: m_LocalPosition.x
@@ -11468,19 +11528,19 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -5146892710459892651, guid: 3d8d2c33718c0b242b2d34b7fec7c4ac, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value:
+      value: 
       objectReference: {fileID: 2100000, guid: ee014e39ae2d878478fc41ed4dc0e829, type: 2}
     - target: {fileID: -3870786254219020117, guid: 3d8d2c33718c0b242b2d34b7fec7c4ac, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value:
+      value: 
       objectReference: {fileID: 2100000, guid: ee014e39ae2d878478fc41ed4dc0e829, type: 2}
     - target: {fileID: -2666854937388730812, guid: 3d8d2c33718c0b242b2d34b7fec7c4ac, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value:
+      value: 
       objectReference: {fileID: 2100000, guid: ee014e39ae2d878478fc41ed4dc0e829, type: 2}
     - target: {fileID: -350464003071630290, guid: 3d8d2c33718c0b242b2d34b7fec7c4ac, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value:
+      value: 
       objectReference: {fileID: 2100000, guid: ee014e39ae2d878478fc41ed4dc0e829, type: 2}
     - target: {fileID: 919132149155446097, guid: 3d8d2c33718c0b242b2d34b7fec7c4ac, type: 3}
       propertyPath: m_Name
@@ -11488,11 +11548,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1661307957570909327, guid: 3d8d2c33718c0b242b2d34b7fec7c4ac, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value:
+      value: 
       objectReference: {fileID: 2100000, guid: ee014e39ae2d878478fc41ed4dc0e829, type: 2}
     - target: {fileID: 4180463435834513888, guid: 3d8d2c33718c0b242b2d34b7fec7c4ac, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value:
+      value: 
       objectReference: {fileID: 2100000, guid: ee014e39ae2d878478fc41ed4dc0e829, type: 2}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -11626,7 +11686,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: cec085649f4083f45b1b7a83d96b876c, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RailWarningSequence
   stepCount: 4
   secondsPerStep: 0.46
@@ -11696,7 +11756,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 3c6aee10f7bc43d6aa7efb70bb7f6c31, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ManualCrankGenerator
   interactionPoint: {fileID: 529583433}
   interactionDistance: 1.35
@@ -12181,7 +12241,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 474bcb49853aa07438625e644c072ee6, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalLightData
   m_UsePipelineSettings: 1
   m_AdditionalLightsShadowResolutionTier: 2
@@ -13350,7 +13410,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -2204794849235753422, guid: 0ff344499384ad544acadf64e90ea262, type: 3}
       propertyPath: 'm_Materials.Array.data[2]'
-      value:
+      value: 
       objectReference: {fileID: 4945439069321849329, guid: fba8a2382f1b79846b20ca3970176df2, type: 2}
     - target: {fileID: 919132149155446097, guid: 0ff344499384ad544acadf64e90ea262, type: 3}
       propertyPath: m_Name
@@ -13567,7 +13627,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 474bcb49853aa07438625e644c072ee6, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalLightData
   m_UsePipelineSettings: 1
   m_AdditionalLightsShadowResolutionTier: 2
@@ -13724,7 +13784,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2db31d2fe0de0f242a0552adf79124f8, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TrainDoorSwitch
   doorIndex: 0
   opensDoor: 1
@@ -13856,7 +13916,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -2204794849235753422, guid: e2e39161dde0a414193f9ec904afa1a2, type: 3}
       propertyPath: 'm_Materials.Array.data[2]'
-      value:
+      value: 
       objectReference: {fileID: 4945439069321849329, guid: fba8a2382f1b79846b20ca3970176df2, type: 2}
     - target: {fileID: 919132149155446097, guid: e2e39161dde0a414193f9ec904afa1a2, type: 3}
       propertyPath: m_Name
@@ -14165,7 +14225,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -2204794849235753422, guid: e2e39161dde0a414193f9ec904afa1a2, type: 3}
       propertyPath: 'm_Materials.Array.data[2]'
-      value:
+      value: 
       objectReference: {fileID: 4945439069321849329, guid: fba8a2382f1b79846b20ca3970176df2, type: 2}
     - target: {fileID: 919132149155446097, guid: e2e39161dde0a414193f9ec904afa1a2, type: 3}
       propertyPath: m_Name
@@ -14458,7 +14518,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -2204794849235753422, guid: e2e39161dde0a414193f9ec904afa1a2, type: 3}
       propertyPath: 'm_Materials.Array.data[2]'
-      value:
+      value: 
       objectReference: {fileID: 4945439069321849329, guid: fba8a2382f1b79846b20ca3970176df2, type: 2}
     - target: {fileID: 919132149155446097, guid: e2e39161dde0a414193f9ec904afa1a2, type: 3}
       propertyPath: m_Name
@@ -16253,7 +16313,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 474bcb49853aa07438625e644c072ee6, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalLightData
   m_UsePipelineSettings: 1
   m_AdditionalLightsShadowResolutionTier: 2
@@ -18826,7 +18886,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -2204794849235753422, guid: 0ff344499384ad544acadf64e90ea262, type: 3}
       propertyPath: 'm_Materials.Array.data[2]'
-      value:
+      value: 
       objectReference: {fileID: 4945439069321849329, guid: fba8a2382f1b79846b20ca3970176df2, type: 2}
     - target: {fileID: 919132149155446097, guid: 0ff344499384ad544acadf64e90ea262, type: 3}
       propertyPath: m_Name
@@ -21325,7 +21385,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -2204794849235753422, guid: e2e39161dde0a414193f9ec904afa1a2, type: 3}
       propertyPath: 'm_Materials.Array.data[2]'
-      value:
+      value: 
       objectReference: {fileID: 4945439069321849329, guid: fba8a2382f1b79846b20ca3970176df2, type: 2}
     - target: {fileID: 919132149155446097, guid: e2e39161dde0a414193f9ec904afa1a2, type: 3}
       propertyPath: m_Name
@@ -21996,7 +22056,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -2204794849235753422, guid: e2e39161dde0a414193f9ec904afa1a2, type: 3}
       propertyPath: 'm_Materials.Array.data[2]'
-      value:
+      value: 
       objectReference: {fileID: 4945439069321849329, guid: fba8a2382f1b79846b20ca3970176df2, type: 2}
     - target: {fileID: 919132149155446097, guid: e2e39161dde0a414193f9ec904afa1a2, type: 3}
       propertyPath: m_Name
@@ -22175,7 +22235,7 @@ Animator:
   m_LinearVelocityBlending: 0
   m_StabilizeFeet: 0
   m_AnimatePhysics: 0
-  m_WarningMessage:
+  m_WarningMessage: 
   m_HasTransformHierarchy: 1
   m_AllowConstantClipSamplingOptimization: 1
   m_KeepAnimatorStateOnDisable: 0
@@ -22300,7 +22360,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: -1552182283, guid: e725a070cec140c4caffb81624c8c787, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Fusion.Runtime.dll::Fusion.NetworkObject
   SortKey: 160671115
   SendPriority: 1
@@ -23177,6 +23237,9 @@ MonoBehaviour:
   smallBattery: {fileID: 919132149155446097, guid: 01d46936173c440fbeafa28f9b64d327, type: 3}
   ammoBoxBody: {fileID: 2100000, guid: 8971842a87fe435b9236d390ff3f28fb, type: 2}
   repairBoxBody: {fileID: 2100000, guid: 1a1d513da0aa455a8e4a895fb7435769, type: 2}
+  riflePrefab: {fileID: 1117582899397640, guid: 689946d975a0e55449b1e7ae41933e73, type: 3}
+  pistolPrefab: {fileID: 1694449805434718, guid: 6f1a7354265853f44b0ed5e2e43676ad, type: 3}
+  zombiePrefab: {fileID: 4493914613880827488, guid: 6dc4cf4496348884d8ee27743ae38562, type: 3}
   cruisingDistance: 1500
   junctionRevealDistance: 150
   approachDistance: 85
@@ -23741,7 +23804,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 474bcb49853aa07438625e644c072ee6, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalLightData
   m_UsePipelineSettings: 1
   m_AdditionalLightsShadowResolutionTier: 2
@@ -25449,6 +25512,7 @@ GameObject:
   m_Component:
   - component: {fileID: 723135982}
   - component: {fileID: 723135983}
+  - component: {fileID: 723135984}
   m_Layer: 0
   m_Name: Warning light spill
   m_TagString: Untagged
@@ -25536,6 +25600,35 @@ Light:
   m_LightUnit: 1
   m_LuxAtDistance: 1
   m_EnableSpotReflector: 1
+--- !u!114 &723135984
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 723135981}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 474bcb49853aa07438625e644c072ee6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalLightData
+  m_UsePipelineSettings: 1
+  m_AdditionalLightsShadowResolutionTier: 2
+  m_CustomShadowLayers: 0
+  m_LightCookieSize: {x: 1, y: 1}
+  m_LightCookieOffset: {x: 0, y: 0}
+  m_SoftShadowQuality: 0
+  m_RenderingLayersMask:
+    serializedVersion: 0
+    m_Bits: 1
+  m_ShadowRenderingLayersMask:
+    serializedVersion: 0
+    m_Bits: 1
+  m_Version: 4
+  m_LightLayerMask: 1
+  m_ShadowLayerMask: 1
+  m_RenderingLayers: 1
+  m_ShadowRenderingLayers: 1
 --- !u!1 &725557096 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 3015682779431780241, guid: 8c39e19aaf0f90745848273ffe7ed14d, type: 3}
@@ -26066,7 +26159,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 474bcb49853aa07438625e644c072ee6, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalLightData
   m_UsePipelineSettings: 1
   m_AdditionalLightsShadowResolutionTier: 2
@@ -32638,7 +32731,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a09ce10e0c6e2e54ea9dbfa7c3c6911a, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TreadmillScenery
   despawnZ: -16
   totalTrackLength: 128
@@ -35393,7 +35486,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -2204794849235753422, guid: 0ff344499384ad544acadf64e90ea262, type: 3}
       propertyPath: 'm_Materials.Array.data[2]'
-      value:
+      value: 
       objectReference: {fileID: 4945439069321849329, guid: fba8a2382f1b79846b20ca3970176df2, type: 2}
     - target: {fileID: 919132149155446097, guid: 0ff344499384ad544acadf64e90ea262, type: 3}
       propertyPath: m_Name
@@ -35988,7 +36081,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: cec085649f4083f45b1b7a83d96b876c, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RailWarningSequence
   stepCount: 4
   secondsPerStep: 0.46
@@ -36616,7 +36709,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -2204794849235753422, guid: 0ff344499384ad544acadf64e90ea262, type: 3}
       propertyPath: 'm_Materials.Array.data[2]'
-      value:
+      value: 
       objectReference: {fileID: 4945439069321849329, guid: fba8a2382f1b79846b20ca3970176df2, type: 2}
     - target: {fileID: 919132149155446097, guid: 0ff344499384ad544acadf64e90ea262, type: 3}
       propertyPath: m_Name
@@ -39801,7 +39894,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 474bcb49853aa07438625e644c072ee6, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalLightData
   m_UsePipelineSettings: 1
   m_AdditionalLightsShadowResolutionTier: 2
@@ -40152,7 +40245,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -2204794849235753422, guid: 0ff344499384ad544acadf64e90ea262, type: 3}
       propertyPath: 'm_Materials.Array.data[2]'
-      value:
+      value: 
       objectReference: {fileID: 4945439069321849329, guid: fba8a2382f1b79846b20ca3970176df2, type: 2}
     - target: {fileID: 919132149155446097, guid: 0ff344499384ad544acadf64e90ea262, type: 3}
       propertyPath: m_Name
@@ -40781,7 +40874,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -2204794849235753422, guid: 0ff344499384ad544acadf64e90ea262, type: 3}
       propertyPath: 'm_Materials.Array.data[2]'
-      value:
+      value: 
       objectReference: {fileID: 4945439069321849329, guid: fba8a2382f1b79846b20ca3970176df2, type: 2}
     - target: {fileID: 919132149155446097, guid: 0ff344499384ad544acadf64e90ea262, type: 3}
       propertyPath: m_Name
@@ -40842,7 +40935,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2db31d2fe0de0f242a0552adf79124f8, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TrainDoorSwitch
   doorIndex: 0
   opensDoor: 0
@@ -41206,7 +41299,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 474bcb49853aa07438625e644c072ee6, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalLightData
   m_UsePipelineSettings: 1
   m_AdditionalLightsShadowResolutionTier: 2
@@ -41235,7 +41328,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 474bcb49853aa07438625e644c072ee6, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalLightData
   m_UsePipelineSettings: 1
   m_AdditionalLightsShadowResolutionTier: 2
@@ -44233,7 +44326,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -2204794849235753422, guid: e2e39161dde0a414193f9ec904afa1a2, type: 3}
       propertyPath: 'm_Materials.Array.data[2]'
-      value:
+      value: 
       objectReference: {fileID: 4945439069321849329, guid: fba8a2382f1b79846b20ca3970176df2, type: 2}
     - target: {fileID: 919132149155446097, guid: e2e39161dde0a414193f9ec904afa1a2, type: 3}
       propertyPath: m_Name
@@ -44452,7 +44545,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -2204794849235753422, guid: e2e39161dde0a414193f9ec904afa1a2, type: 3}
       propertyPath: 'm_Materials.Array.data[2]'
-      value:
+      value: 
       objectReference: {fileID: 4945439069321849329, guid: fba8a2382f1b79846b20ca3970176df2, type: 2}
     - target: {fileID: 919132149155446097, guid: e2e39161dde0a414193f9ec904afa1a2, type: 3}
       propertyPath: m_Name
@@ -45155,6 +45248,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1203716720}
   - component: {fileID: 1203716721}
+  - component: {fileID: 1203716722}
   m_Layer: 0
   m_Name: Warning light spill
   m_TagString: Untagged
@@ -45242,6 +45336,35 @@ Light:
   m_LightUnit: 1
   m_LuxAtDistance: 1
   m_EnableSpotReflector: 1
+--- !u!114 &1203716722
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1203716719}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 474bcb49853aa07438625e644c072ee6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalLightData
+  m_UsePipelineSettings: 1
+  m_AdditionalLightsShadowResolutionTier: 2
+  m_CustomShadowLayers: 0
+  m_LightCookieSize: {x: 1, y: 1}
+  m_LightCookieOffset: {x: 0, y: 0}
+  m_SoftShadowQuality: 0
+  m_RenderingLayersMask:
+    serializedVersion: 0
+    m_Bits: 1
+  m_ShadowRenderingLayersMask:
+    serializedVersion: 0
+    m_Bits: 1
+  m_Version: 4
+  m_LightLayerMask: 1
+  m_ShadowLayerMask: 1
+  m_RenderingLayers: 1
+  m_ShadowRenderingLayers: 1
 --- !u!1 &1204155566
 GameObject:
   m_ObjectHideFlags: 0
@@ -47390,7 +47513,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -2204794849235753422, guid: e2e39161dde0a414193f9ec904afa1a2, type: 3}
       propertyPath: 'm_Materials.Array.data[2]'
-      value:
+      value: 
       objectReference: {fileID: 4945439069321849329, guid: fba8a2382f1b79846b20ca3970176df2, type: 2}
     - target: {fileID: 919132149155446097, guid: e2e39161dde0a414193f9ec904afa1a2, type: 3}
       propertyPath: m_Name
@@ -47825,7 +47948,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a09ce10e0c6e2e54ea9dbfa7c3c6911a, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TreadmillScenery
   despawnZ: -16
   totalTrackLength: 128
@@ -48016,7 +48139,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 474bcb49853aa07438625e644c072ee6, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalLightData
   m_UsePipelineSettings: 1
   m_AdditionalLightsShadowResolutionTier: 2
@@ -48517,7 +48640,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 408605a8fc400c446b24b16678b930da, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::StartingRailYard
 --- !u!1 &1311166486 stripped
 GameObject:
@@ -49671,7 +49794,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -2204794849235753422, guid: 0ff344499384ad544acadf64e90ea262, type: 3}
       propertyPath: 'm_Materials.Array.data[2]'
-      value:
+      value: 
       objectReference: {fileID: 4945439069321849329, guid: fba8a2382f1b79846b20ca3970176df2, type: 2}
     - target: {fileID: 919132149155446097, guid: 0ff344499384ad544acadf64e90ea262, type: 3}
       propertyPath: m_Name
@@ -50437,7 +50560,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -2204794849235753422, guid: e2e39161dde0a414193f9ec904afa1a2, type: 3}
       propertyPath: 'm_Materials.Array.data[2]'
-      value:
+      value: 
       objectReference: {fileID: 4945439069321849329, guid: fba8a2382f1b79846b20ca3970176df2, type: 2}
     - target: {fileID: 919132149155446097, guid: e2e39161dde0a414193f9ec904afa1a2, type: 3}
       propertyPath: m_Name
@@ -50933,7 +51056,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -2204794849235753422, guid: 0ff344499384ad544acadf64e90ea262, type: 3}
       propertyPath: 'm_Materials.Array.data[2]'
-      value:
+      value: 
       objectReference: {fileID: 4945439069321849329, guid: fba8a2382f1b79846b20ca3970176df2, type: 2}
     - target: {fileID: 919132149155446097, guid: 0ff344499384ad544acadf64e90ea262, type: 3}
       propertyPath: m_Name
@@ -51028,7 +51151,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -2204794849235753422, guid: 0ff344499384ad544acadf64e90ea262, type: 3}
       propertyPath: 'm_Materials.Array.data[2]'
-      value:
+      value: 
       objectReference: {fileID: 4945439069321849329, guid: fba8a2382f1b79846b20ca3970176df2, type: 2}
     - target: {fileID: 919132149155446097, guid: 0ff344499384ad544acadf64e90ea262, type: 3}
       propertyPath: m_Name
@@ -51431,7 +51554,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a09ce10e0c6e2e54ea9dbfa7c3c6911a, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TreadmillScenery
   despawnZ: -16
   totalTrackLength: 128
@@ -52088,7 +52211,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -2204794849235753422, guid: 0ff344499384ad544acadf64e90ea262, type: 3}
       propertyPath: 'm_Materials.Array.data[2]'
-      value:
+      value: 
       objectReference: {fileID: 4945439069321849329, guid: fba8a2382f1b79846b20ca3970176df2, type: 2}
     - target: {fileID: 919132149155446097, guid: 0ff344499384ad544acadf64e90ea262, type: 3}
       propertyPath: m_Name
@@ -53762,7 +53885,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -2204794849235753422, guid: 0ff344499384ad544acadf64e90ea262, type: 3}
       propertyPath: 'm_Materials.Array.data[2]'
-      value:
+      value: 
       objectReference: {fileID: 4945439069321849329, guid: fba8a2382f1b79846b20ca3970176df2, type: 2}
     - target: {fileID: 919132149155446097, guid: 0ff344499384ad544acadf64e90ea262, type: 3}
       propertyPath: m_Name
@@ -59393,7 +59516,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 69caa44cb58957a4d83e63a692df0f80, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ConsoleInteractable
   consoleType: 2
   interactDistance: 2
@@ -62460,7 +62583,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: a09ce10e0c6e2e54ea9dbfa7c3c6911a, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TreadmillScenery
   despawnZ: -16
   totalTrackLength: 128
@@ -63277,7 +63400,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -2204794849235753422, guid: e2e39161dde0a414193f9ec904afa1a2, type: 3}
       propertyPath: 'm_Materials.Array.data[2]'
-      value:
+      value: 
       objectReference: {fileID: 4945439069321849329, guid: fba8a2382f1b79846b20ca3970176df2, type: 2}
     - target: {fileID: 919132149155446097, guid: e2e39161dde0a414193f9ec904afa1a2, type: 3}
       propertyPath: m_Name
@@ -63536,7 +63659,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 66680831853d5ac458162febc421ea68, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RailSideScenery
 --- !u!1 &1801633648 stripped
 GameObject:
@@ -63553,7 +63676,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 474bcb49853aa07438625e644c072ee6, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalLightData
   m_UsePipelineSettings: 1
   m_AdditionalLightsShadowResolutionTier: 2
@@ -63582,7 +63705,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 474bcb49853aa07438625e644c072ee6, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.UniversalAdditionalLightData
   m_UsePipelineSettings: 1
   m_AdditionalLightsShadowResolutionTier: 2
@@ -64248,7 +64371,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -2204794849235753422, guid: e2e39161dde0a414193f9ec904afa1a2, type: 3}
       propertyPath: 'm_Materials.Array.data[2]'
-      value:
+      value: 
       objectReference: {fileID: 4945439069321849329, guid: fba8a2382f1b79846b20ca3970176df2, type: 2}
     - target: {fileID: 919132149155446097, guid: e2e39161dde0a414193f9ec904afa1a2, type: 3}
       propertyPath: m_Name
@@ -64589,7 +64712,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -8184861260314193224, guid: 1f6e465ca8037d24986111b13d3deb37, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value:
+      value: 
       objectReference: {fileID: 2100000, guid: ee014e39ae2d878478fc41ed4dc0e829, type: 2}
     - target: {fileID: 919132149155446097, guid: 1f6e465ca8037d24986111b13d3deb37, type: 3}
       propertyPath: m_Name
@@ -64597,15 +64720,15 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2146533063040511206, guid: 1f6e465ca8037d24986111b13d3deb37, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value:
+      value: 
       objectReference: {fileID: 2100000, guid: ee014e39ae2d878478fc41ed4dc0e829, type: 2}
     - target: {fileID: 3290322698924551934, guid: 1f6e465ca8037d24986111b13d3deb37, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value:
+      value: 
       objectReference: {fileID: 2100000, guid: ee014e39ae2d878478fc41ed4dc0e829, type: 2}
     - target: {fileID: 6021955443885429864, guid: 1f6e465ca8037d24986111b13d3deb37, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value:
+      value: 
       objectReference: {fileID: 2100000, guid: ee014e39ae2d878478fc41ed4dc0e829, type: 2}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -64642,7 +64765,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: cec085649f4083f45b1b7a83d96b876c, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RailWarningSequence
   stepCount: 2
   secondsPerStep: 0.46
@@ -65159,7 +65282,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: cec085649f4083f45b1b7a83d96b876c, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RailWarningSequence
   stepCount: 2
   secondsPerStep: 0.46
@@ -66943,7 +67066,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -2204794849235753422, guid: 0ff344499384ad544acadf64e90ea262, type: 3}
       propertyPath: 'm_Materials.Array.data[2]'
-      value:
+      value: 
       objectReference: {fileID: 4945439069321849329, guid: fba8a2382f1b79846b20ca3970176df2, type: 2}
     - target: {fileID: 919132149155446097, guid: 0ff344499384ad544acadf64e90ea262, type: 3}
       propertyPath: m_Name
@@ -68844,7 +68967,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -2204794849235753422, guid: e2e39161dde0a414193f9ec904afa1a2, type: 3}
       propertyPath: 'm_Materials.Array.data[2]'
-      value:
+      value: 
       objectReference: {fileID: 4945439069321849329, guid: fba8a2382f1b79846b20ca3970176df2, type: 2}
     - target: {fileID: 919132149155446097, guid: e2e39161dde0a414193f9ec904afa1a2, type: 3}
       propertyPath: m_Name
@@ -70439,7 +70562,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -2204794849235753422, guid: e2e39161dde0a414193f9ec904afa1a2, type: 3}
       propertyPath: 'm_Materials.Array.data[2]'
-      value:
+      value: 
       objectReference: {fileID: 4945439069321849329, guid: fba8a2382f1b79846b20ca3970176df2, type: 2}
     - target: {fileID: 919132149155446097, guid: e2e39161dde0a414193f9ec904afa1a2, type: 3}
       propertyPath: m_Name
@@ -71178,7 +71301,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -2204794849235753422, guid: 0ff344499384ad544acadf64e90ea262, type: 3}
       propertyPath: 'm_Materials.Array.data[2]'
-      value:
+      value: 
       objectReference: {fileID: 4945439069321849329, guid: fba8a2382f1b79846b20ca3970176df2, type: 2}
     - target: {fileID: 919132149155446097, guid: 0ff344499384ad544acadf64e90ea262, type: 3}
       propertyPath: m_Name
@@ -72584,7 +72707,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -2204794849235753422, guid: 0ff344499384ad544acadf64e90ea262, type: 3}
       propertyPath: 'm_Materials.Array.data[2]'
-      value:
+      value: 
       objectReference: {fileID: 4945439069321849329, guid: fba8a2382f1b79846b20ca3970176df2, type: 2}
     - target: {fileID: 919132149155446097, guid: 0ff344499384ad544acadf64e90ea262, type: 3}
       propertyPath: m_Name
@@ -72895,7 +73018,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -2204794849235753422, guid: 0ff344499384ad544acadf64e90ea262, type: 3}
       propertyPath: 'm_Materials.Array.data[2]'
-      value:
+      value: 
       objectReference: {fileID: 4945439069321849329, guid: fba8a2382f1b79846b20ca3970176df2, type: 2}
     - target: {fileID: 919132149155446097, guid: 0ff344499384ad544acadf64e90ea262, type: 3}
       propertyPath: m_Name
@@ -73537,7 +73660,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -2204794849235753422, guid: 0ff344499384ad544acadf64e90ea262, type: 3}
       propertyPath: 'm_Materials.Array.data[2]'
-      value:
+      value: 
       objectReference: {fileID: 4945439069321849329, guid: fba8a2382f1b79846b20ca3970176df2, type: 2}
     - target: {fileID: 919132149155446097, guid: 0ff344499384ad544acadf64e90ea262, type: 3}
       propertyPath: m_Name

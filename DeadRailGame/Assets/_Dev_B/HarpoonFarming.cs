@@ -51,7 +51,8 @@ public class HarpoonFarming : NetworkBehaviour
 
     private void Update()
     {
-        if (Object == null || !Object.IsValid || playerMovement == null || !playerMovement.IsLocalPlayer) return;
+        if (GamePauseMenu.BlocksGameplayInput) return;
+        if (Object == null || !Object.IsValid || playerMovement == null || !playerMovement.IsLocalPlayer || playerMovement.IsDowned) return;
         if ((TerminalUIManager.Instance != null && TerminalUIManager.Instance.IsUiOpen) ||
             (RailRouteLoop.Instance != null && RailRouteLoop.Instance.Ready && RailRouteLoop.Instance.IsTransition)) return;
 
@@ -122,6 +123,7 @@ public class HarpoonFarming : NetworkBehaviour
     [Rpc(RpcSources.InputAuthority | RpcSources.StateAuthority, RpcTargets.StateAuthority)]
     private void Rpc_FireHarpoon(Vector3 origin, Vector3 direction)
     {
+        if (playerMovement != null && (playerMovement.IsDowned || !playerMovement.HasRole(TrainRole.Gunner))) return;
         EquipmentPivotController equipment = GetComponent<EquipmentPivotController>();
         if (isFarming || (equipment != null && equipment.CurrentMode != EquipmentPivotController.EquipmentMode.P3_HarpoonMount)) return;
         if (!float.IsFinite(origin.x) || !float.IsFinite(origin.y) || !float.IsFinite(origin.z) ||

@@ -322,12 +322,13 @@ public class EquipmentPivotController : NetworkBehaviour
 
     private void Update()
     {
+        if (GamePauseMenu.BlocksGameplayInput) return;
         if (Object == null || !Object.IsValid || _playerMovement == null || !_playerMovement.IsLocalPlayer) return;
-        if (_playerMovement.IsClimbingLadder || CurrentMode != EquipmentMode.P2_Searchlight) return;
+        if (_playerMovement.IsDowned || _playerMovement.IsClimbingLadder || CurrentMode != EquipmentMode.P2_Searchlight) return;
         if ((TerminalUIManager.Instance != null && TerminalUIManager.Instance.IsUiOpen) ||
             (RailRouteLoop.Instance != null && RailRouteLoop.Instance.Ready && RailRouteLoop.Instance.IsTransition)) return;
 
-        if (Keyboard.current != null && Keyboard.current.fKey.wasPressedThisFrame)
+        if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
             Rpc_ToggleSearchlight();
     }
 
@@ -341,6 +342,7 @@ public class EquipmentPivotController : NetworkBehaviour
     private void Rpc_ToggleSearchlight()
     {
         if (CurrentMode != EquipmentMode.P2_Searchlight) return;
+        if (_playerMovement == null || _playerMovement.IsDowned || !_playerMovement.HasRole(TrainRole.Searchlight)) return;
         if (TreadmillManager.Instance != null && !TreadmillManager.Instance.HasPower) return;
         IsSearchlightOn = !IsSearchlightOn;
     }
@@ -390,7 +392,7 @@ public class EquipmentPivotController : NetworkBehaviour
             }
         }
 
-        if (IsNearWeaponMount())
+        if (_playerMovement != null && _playerMovement.HasRole(TrainRole.Gunner) && IsNearWeaponMount())
         {
             float distance = GetWeaponMountDistance();
             if (distance < nearestDistance)
@@ -572,6 +574,8 @@ public class EquipmentPivotController : NetworkBehaviour
 
         if (CurrentMode != mode)
         {
+            TrainRole required = mode == EquipmentMode.P2_Searchlight ? TrainRole.Searchlight : TrainRole.Gunner;
+            if (_playerMovement == null || _playerMovement.IsDowned || !_playerMovement.HasRole(required)) return false;
             if (mode == EquipmentMode.P2_Searchlight && !IsNearSearchlightControl()) return false;
             if (mode == EquipmentMode.P3_HarpoonMount && !IsNearWeaponMount()) return false;
         }
@@ -595,15 +599,15 @@ public class EquipmentPivotController : NetworkBehaviour
         string prompt;
         if (_playerMovement.IsClimbingLadder)
         {
-            prompt = "[W] 오르기  [S] 내려가기  [E] 사다리 놓기";
+            prompt = "[W] 오르기  [S] 내려가기  [F] 사다리 놓기";
         }
         else if (CurrentMode == EquipmentMode.P2_Searchlight && IsNearSearchlightControl())
         {
-            prompt = $"[E] 나가기  [F] 탐조등 {(IsSearchlightOn ? "끄기" : "켜기")}";
+            prompt = $"[F] 나가기  [좌클릭] 탐조등 {(IsSearchlightOn ? "끄기" : "켜기")}";
         }
         else if (CurrentMode == EquipmentMode.P3_HarpoonMount && IsNearWeaponMount())
         {
-            prompt = "[E] 작살에서 나가기";
+            prompt = "[F] 작살에서 나가기";
         }
         else if (CurrentMode != EquipmentMode.None)
         {
@@ -611,11 +615,11 @@ public class EquipmentPivotController : NetworkBehaviour
         }
         else if (GetNearestInteractionTarget(out _) == InteractionTarget.Ladder)
         {
-            prompt = "[E] 키를 눌러 사다리 잡기";
+            prompt = "[F] 사다리 잡기";
         }
         else if (GetNearestInteractionTarget(out _) == InteractionTarget.Harpoon)
         {
-            prompt = "[E] 키를 눌러 P3 거치형 작살 사용";
+            prompt = "[F] P3 거치형 작살 사용";
         }
         else
         {

@@ -162,10 +162,6 @@ public static class FrontendAuthoring
         Button credits = ArtButton(page, "Credits", "TitleCredits", 53, 883, 79, 76);
         BottomLeft(credits.GetComponent<RectTransform>());
         BottomLeft(Label(page, "Credits label", "CREDITS", 51, 958, 84, 31, 19, TextAnchor.MiddleCenter).rectTransform);
-        BottomLeft(ArtButton(page, "Stats", "TitleStats", 159, 883, 79, 76).GetComponent<RectTransform>());
-        BottomLeft(Label(page, "Stats label", "STATS", 157, 958, 84, 31, 19, TextAnchor.MiddleCenter).rectTransform);
-        BottomLeft(ArtButton(page, "Shop", "TitleShop", 267, 883, 79, 76).GetComponent<RectTransform>());
-        BottomLeft(Label(page, "Shop label", "SHOP", 265, 958, 84, 31, 19, TextAnchor.MiddleCenter).rectTransform);
         RectTransform version = Label(page, "Version", "v" + Application.version, 1409, 963, 95, 32, 23, TextAnchor.MiddleRight).rectTransform;
         version.anchorMin = version.anchorMax = Vector2.one;
         version.anchoredPosition = new Vector2(-127, -963);
@@ -272,8 +268,8 @@ public static class FrontendAuthoring
         menu.minusButton = ArtButton(panel, "Fewer players", "CountMinus", 153, 352, 84, 81);
         Picture(panel, "Player count frame", "CountValue", 259, 352, 221, 81);
         menu.playerCountText = Label(panel, "Player count", "4", 259, 352, 221, 81, 43, TextAnchor.MiddleCenter);
-        menu.plusButton = ArtButton(panel, "More players", "CountPlus", 581, 352, 84, 81);
-        menu.createStatus = Label(panel, "Create status", "2 - 4 players", 44, 444, 654, 54, 26, TextAnchor.MiddleCenter);
+        menu.plusButton = ArtButton(panel, "More players", "CountPlus", 502, 352, 84, 81);
+        menu.createStatus = Label(panel, "Create status", "2 or 4 players", 44, 444, 654, 54, 26, TextAnchor.MiddleCenter);
         menu.createStatus.color = new Color(0.65f, 0.61f, 0.55f);
         menu.submitButton = ArtButton(panel, "Confirm create room", "CreateSubmit", 33, 525, 680, 107);
         menu.createBackButton = ArtButton(page, "Back to lobby", "CreateBack", 47, 920, 139, 62);

@@ -41,6 +41,7 @@ public class JunctionBranchDirector : NetworkBehaviour
 
     private void Update()
     {
+        if (GamePauseMenu.BlocksGameplayInput) return;
         // 개발 테스트용: 방장(Host)이 키보드 J키를 누르면 즉시 분기점 진입 판정 및 연출 실행!
         if (HasStateAuthority && Keyboard.current != null && Keyboard.current.jKey.wasPressedThisFrame && !_isTransitioning)
         {

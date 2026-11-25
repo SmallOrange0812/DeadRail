@@ -3,6 +3,7 @@ using Fusion;
 using UnityEngine.SceneManagement;
 using System.Collections.Generic;
 using System.Collections;
+using System.Threading.Tasks;
 
 public class NetworkManager : MonoBehaviour
 {
@@ -18,11 +19,18 @@ public class NetworkManager : MonoBehaviour
     private NetworkEvents _playerEvents;
 
     private PlayerControlInput _pendingInput;
+    private bool _leavingSession;
+
+    internal bool HasRunningSession => !_leavingSession && _runner != null && _runner.IsRunning;
+    internal bool IsHostingMultiplayer => _runner != null && _runner.GameMode == GameMode.Host;
 
     private readonly HashSet<PlayerRef> _playersBeingSpawned = new HashSet<PlayerRef>();
+    private readonly Dictionary<PlayerRef, int> _combatSlots = new Dictionary<PlayerRef, int>();
 
     async void Start()
     {
+        gameObject.AddComponent<GamePauseMenu>().Initialize(this);
+
         // 1. 씬에 이미 통신 관리자(러너)가 있는지 확인
         NetworkRunner existingRunner = FindObjectOfType<NetworkRunner>();
 
@@ -108,6 +116,8 @@ public class NetworkManager : MonoBehaviour
 
         _playerEvents.OnInput ??= new NetworkEvents.InputEvent();
         _playerEvents.OnInput.AddListener(SubmitInput);
+        _playerEvents.OnShutdown ??= new NetworkEvents.ShutdownEvent();
+        _playerEvents.OnShutdown.AddListener(HandleRunnerShutdown);
 
         if (_runner.IsServer)
         {
@@ -161,8 +171,20 @@ public class NetworkManager : MonoBehaviour
             );
 
             Quaternion spawnRotation = spawnPoint.rotation;
-
-
+            int limit = runner.GameMode != GameMode.Single && runner.SessionInfo.MaxPlayers == 2 ? 2 : 4;
+            LobbyRoleRoster roster = runner.GetComponent<LobbyRoleRoster>();
+            int slot = roster != null ? roster.SeatOf(player) : 0;
+            if (slot == 0)
+            {
+                for (int candidate = 1; candidate <= limit; candidate++)
+                {
+                    if (_combatSlots.ContainsValue(candidate) ||
+                        (roster != null && roster.OwnerOfSeat(candidate) != PlayerRef.None)) continue;
+                    slot = candidate;
+                    break;
+                }
+            }
+            if (slot != 0) _combatSlots.Add(player, slot);
 
             var playerObject = await runner.SpawnAsync(
                 playerPrefab,
@@ -184,6 +206,8 @@ public class NetworkManager : MonoBehaviour
                 return;
             }
 
+            if (playerObject.TryGetComponent(out PlayerMovement movement))
+                movement.AssignCombatSlot(slot, LobbyRoleRoster.RolesForSeat(slot, limit));
             runner.SetPlayerObject(player, playerObject);
             StartCoroutine(ApplySpawnPositionAfterNetworkInitialization(
                 playerObject,
@@ -198,6 +222,7 @@ public class NetworkManager : MonoBehaviour
         }
         finally
         {
+            if (!runner.TryGetPlayerObject(player, out _)) _combatSlots.Remove(player);
             _playersBeingSpawned.Remove(player);
         }
     }
@@ -244,6 +269,28 @@ public class NetworkManager : MonoBehaviour
         );
     }
 
+    internal bool TryResetRunPlayers(NetworkRunner runner)
+    {
+        if (runner != _runner) return false;
+        var resets = new List<(PlayerMovement movement, NetworkTransform netTransform, Transform spawn)>();
+        foreach (PlayerRef player in runner.ActivePlayers)
+        {
+            Transform spawn = GetYardSpawnPoint(runner, player);
+            if (spawn == null || !runner.TryGetPlayerObject(player, out NetworkObject actor) ||
+                !actor.HasStateAuthority || !actor.TryGetComponent(out PlayerMovement movement) ||
+                !actor.TryGetComponent(out NetworkTransform netTransform)) return false;
+            resets.Add((movement, netTransform, spawn));
+        }
+        if (resets.Count == 0) return false;
+
+        foreach (var reset in resets)
+        {
+            reset.movement.ResetPlayerForRun();
+            reset.netTransform.Teleport(reset.spawn.position + Vector3.up * playerSpawnHeight, reset.spawn.rotation);
+        }
+        return true;
+    }
+
     private Transform GetYardSpawnPoint(NetworkRunner runner, PlayerRef player)
     {
         if (yardSpawnPoints == null || yardSpawnPoints.Length == 0)
@@ -281,6 +328,7 @@ public class NetworkManager : MonoBehaviour
 
     private void DespawnPlayer(NetworkRunner runner, PlayerRef player)
     {
+        _combatSlots.Remove(player);
         if (runner.TryGetPlayerObject(player, out var playerObject))
         {
             runner.Despawn(playerObject);
@@ -294,7 +342,8 @@ public class NetworkManager : MonoBehaviour
             return;
         }
 
-        if (!_runner.TryGetPlayerObject(_runner.LocalPlayer, out var playerObject) ||
+        if (GamePauseMenu.BlocksGameplayInput ||
+            !_runner.TryGetPlayerObject(_runner.LocalPlayer, out var playerObject) ||
         !playerObject.TryGetComponent<PlayerMovement>(out var movement))
         {
             _pendingInput = default;
@@ -308,6 +357,7 @@ public class NetworkManager : MonoBehaviour
             return;
         }
         _pendingInput.Move = currentInput.Move;
+        _pendingInput.SprintHeld = currentInput.SprintHeld;
         _pendingInput.Look += currentInput.Look;
         // Spacebar 입력은 다음 네트워크 입력 전송까지 보관합니다.
         _pendingInput.JumpPressed |= currentInput.JumpPressed;
@@ -317,6 +367,7 @@ public class NetworkManager : MonoBehaviour
 
     private void SubmitInput(NetworkRunner runner, NetworkInput input)
     {
+        if (GamePauseMenu.BlocksGameplayInput) _pendingInput = default;
         input.Set(_pendingInput);
         _pendingInput.Look = Vector2.zero;
         _pendingInput.JumpPressed = false;
@@ -324,11 +375,47 @@ public class NetworkManager : MonoBehaviour
         _pendingInput.SearchlightPressed = false;
     }
 
+    internal async Task<bool> LeaveCurrentGame()
+    {
+        int titleIndex = SceneUtility.GetBuildIndexByScenePath(FrontendMenu.TitleScene);
+        if (!HasRunningSession || titleIndex < 0) return false;
+
+        _leavingSession = true;
+        try
+        {
+            await _runner.Shutdown();
+        }
+        catch (System.Exception exception)
+        {
+            Debug.LogWarning($"[Game session] {exception.Message}");
+            if (_runner != null && _runner.IsRunning)
+            {
+                _leavingSession = false;
+                return false;
+            }
+        }
+
+        if (Application.isPlaying) await SceneManager.LoadSceneAsync(titleIndex);
+        return true;
+    }
+
+    private async void HandleRunnerShutdown(NetworkRunner runner, ShutdownReason reason)
+    {
+        if (runner != _runner || _leavingSession) return;
+        _leavingSession = true;
+        await Task.Yield();
+        int titleIndex = SceneUtility.GetBuildIndexByScenePath(FrontendMenu.TitleScene);
+        if (Application.isPlaying && titleIndex >= 0) await SceneManager.LoadSceneAsync(titleIndex);
+    }
+
+    private void OnApplicationQuit() => _leavingSession = true;
+
     private void OnDestroy()
     {
         if (_playerEvents == null) return;
 
         _playerEvents.OnInput?.RemoveListener(SubmitInput);
+        _playerEvents.OnShutdown?.RemoveListener(HandleRunnerShutdown);
         _playerEvents.PlayerJoined?.RemoveListener(SpawnPlayer);
         _playerEvents.PlayerLeft?.RemoveListener(DespawnPlayer);
     }

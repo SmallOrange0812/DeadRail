@@ -277,8 +277,15 @@ public class MapNodeManager : NetworkBehaviour
     }
 
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
-    public void Rpc_ToggleTrackSwitch()
+    public void Rpc_ToggleTrackSwitch(RpcInfo info = default)
     {
+        if (Debug.isDebugBuild && PlayerMovement.CanPlayerUseRole(Runner, info, TrainRole.Gunner))
+            ApplyTrackSwitchHit();
+    }
+
+    internal void ApplyTrackSwitchHit()
+    {
+        if (!HasStateAuthority) return;
         RailRouteLoop route = RailRouteLoop.Instance;
         if (route != null && route.Ready)
         {
@@ -292,8 +299,9 @@ public class MapNodeManager : NetworkBehaviour
     }
 
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
-    public void Rpc_ForceRescanBranch()
+    public void Rpc_ForceRescanBranch(RpcInfo info = default)
     {
+        if (!PlayerMovement.CanPlayerUseRole(Runner, info, TrainRole.Radar)) return;
         GenerateNextBranch();
     }
 
@@ -302,7 +310,7 @@ public class MapNodeManager : NetworkBehaviour
         if (!Debug.isDebugBuild) return;
         if (Object == null || !Object.IsValid) return;
 
-        if (Input.GetKeyDown(KeyCode.F8))
+        if (!GamePauseMenu.BlocksGameplayInput && Input.GetKeyDown(KeyCode.F8))
         {
             Rpc_ToggleTrackSwitch();
         }

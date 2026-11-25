@@ -8,9 +8,10 @@ public struct PlayerControlInput : INetworkInput
     public bool JumpPressed;
     public bool InteractPressed;
     public bool SearchlightPressed;
+    public bool SprintHeld;
 }
 
-public class PlayerMovement : NetworkBehaviour
+public partial class PlayerMovement : NetworkBehaviour
 {
     public bool IsLocalPlayer =>
         Runner.GameMode == GameMode.Shared 
@@ -31,6 +32,13 @@ public class PlayerMovement : NetworkBehaviour
     [Networked] public int InventoryMedicalKits { get; private set; }
     [Networked] public int InventoryRepairKits { get; private set; }
     [Networked] public int InventoryAmmunition { get; private set; }
+
+    internal bool TryConsumeRepairKit()
+    {
+        if (!HasStateAuthority || InventoryRepairKits <= 0) return false;
+        InventoryRepairKits--;
+        return true;
+    }
 
     internal void RecordInventoryPickup(FarmingSupplyKind kind)
     {
@@ -198,6 +206,7 @@ public class PlayerMovement : NetworkBehaviour
 
     public override void Spawned()
     {
+        InitializeCombat();
         if (IsLocalPlayer)
         {
             _mainCamera = Camera.main;
@@ -217,8 +226,11 @@ public class PlayerMovement : NetworkBehaviour
             }
 
             // (Cursor 상태는 TerminalUIManager가 제어하므로 여기서는 기본 잠금 처리)
-            Cursor.lockState = CursorLockMode.Locked;
-            Cursor.visible = false;
+            if (!GamePauseMenu.BlocksGameplayInput)
+            {
+                Cursor.lockState = CursorLockMode.Locked;
+                Cursor.visible = false;
+            }
         }
         else
         {
@@ -228,10 +240,11 @@ public class PlayerMovement : NetworkBehaviour
 
     public override void Render()
     {
+        RenderCombat();
         if (!IsLocalPlayer) return;
 
         // 터미널 조작 중에는 시점 조작과 줌 입력을 무시합니다.
-        if (isUsingTerminal) return;
+        if (isUsingTerminal || GamePauseMenu.BlocksGameplayInput) return;
 
         // 🔭 마우스 휠 스크롤 또는 Z키로 멀리 있는 표지판 확대(Zoom-In) 기능!
         float scroll = Input.GetAxis("Mouse ScrollWheel");
@@ -265,9 +278,10 @@ public class PlayerMovement : NetworkBehaviour
 
     public PlayerControlInput ReadLocalInput()
     {
+        if (GamePauseMenu.BlocksGameplayInput) return default;
         if (RailRouteLoop.Instance != null && RailRouteLoop.Instance.Ready && RailRouteLoop.Instance.IsTransition)
             return default;
-        if (isUsingTerminal ||
+        if (IsDowned || isUsingTerminal ||
             (TerminalUIManager.Instance != null && TerminalUIManager.Instance.BlocksPlayerInput))
         {
             return default;
@@ -275,7 +289,7 @@ public class PlayerMovement : NetworkBehaviour
 
         float zoomRatio = fpsCamera != null ? fpsCamera.fieldOfView / normalFOV : 1f;
         float sensitivity = mouseSensitivity * Mathf.Clamp(zoomRatio, 0.35f, 1f);
-        bool interactPressed = Input.GetKeyDown(KeyCode.E);
+        bool interactPressed = Input.GetKeyDown(KeyCode.F);
         bool searchlightPressed = false;
         if (interactPressed && TerminalUIManager.Instance != null && TerminalUIManager.Instance.TryInteractWithAimedTarget(this, out searchlightPressed))
         {
@@ -283,19 +297,33 @@ public class PlayerMovement : NetworkBehaviour
             interactPressed = false;
         }
 
+        if (interactPressed && !IsClimbingLadder && CanUsePersonalEquipment &&
+            (TryRequestRevive() || ManualCrankGenerator.TryInteract(this) ||
+             (RailRouteLoop.Instance != null && (RailRouteLoop.Instance.TryInteractCargo(this) ||
+                RailRouteLoop.Instance.TryCollectNearbySupply(this)))))
+            interactPressed = false;
+
         return new PlayerControlInput
         {
             Move = new Vector2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical")),
             Look = new Vector2(Input.GetAxis("Mouse X"), Input.GetAxis("Mouse Y")) * sensitivity,
             JumpPressed = Input.GetKeyDown(KeyCode.Space),
             InteractPressed = interactPressed,
-            SearchlightPressed = searchlightPressed
+            SearchlightPressed = searchlightPressed,
+            SprintHeld = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift)
         };
     }
 
     public override void FixedUpdateNetwork()
     {
         if (!HasStateAuthority) return;
+        AdvanceReload();
+        if (IsDowned)
+        {
+            if (_isClimbingLadder) ReleaseLadder();
+            if (anim != null) anim.SetFloat("Speed", 0f);
+            return;
+        }
 
         PlayerControlInput controls = default;
 
@@ -312,7 +340,7 @@ public class PlayerMovement : NetworkBehaviour
         {
             if (controls.InteractPressed)
             {
-                // E releases the ladder from the player's current rung.
+                // F releases the ladder from the player's current rung.
                 _ladderClimbLocalPosition += _ladderClimbInwardLocal * 0.65f;
                 if (_ladderClimbReference != null)
                     transform.position = _ladderClimbReference.TransformPoint(_ladderClimbLocalPosition);
@@ -336,8 +364,7 @@ public class PlayerMovement : NetworkBehaviour
         if (controls.InteractPressed)
         {
             EquipmentPivotController equipment = GetComponent<EquipmentPivotController>();
-            // The harpoon gets E only at roof height and inside its own range;
-            // below that, E is reserved for the ladder.
+            // At roof height, give the harpoon priority over the ladder.
             if (equipment != null && equipment.TryInteractWithHarpoonMount())
                 return;
 
@@ -353,7 +380,7 @@ public class PlayerMovement : NetworkBehaviour
 
         Vector3 move = transform.right * controls.Move.x
                      + transform.forward * controls.Move.y;
-        Vector3 velocity = move.normalized * moveSpeed;
+        Vector3 velocity = move.normalized * UpdateSprint(controls);
 
         if (controls.JumpPressed && _controller.isGrounded)
         {
