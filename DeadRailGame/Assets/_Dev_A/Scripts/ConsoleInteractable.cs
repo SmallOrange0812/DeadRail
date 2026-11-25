@@ -42,7 +42,7 @@ public class ConsoleInteractable : MonoBehaviour
             : null;
     }
 
-    internal static bool TryGetAimedHit(PlayerMovement player, out RaycastHit hit)
+    internal static bool TryGetAimedHit(PlayerMovement player, out RaycastHit hit, bool includeTaggedItems = false)
     {
         hit = default;
         if (player == null || player.Object == null || !player.Object.IsValid || !player.IsLocalPlayer
@@ -57,13 +57,13 @@ public class ConsoleInteractable : MonoBehaviour
         if (!Physics.Raycast(ray, out hit, Mathf.Infinity, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Collide))
             return false;
 
-        if (!IsAimSurface(hit.collider, player))
+        if (!IsAimSurface(hit.collider, player, includeTaggedItems))
         {
             hit = default;
             float nearest = float.PositiveInfinity;
             foreach (RaycastHit candidate in Physics.RaycastAll(ray, Mathf.Infinity, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Collide))
             {
-                if (candidate.distance >= nearest || !IsAimSurface(candidate.collider, player))
+                if (candidate.distance >= nearest || !IsAimSurface(candidate.collider, player, includeTaggedItems))
                     continue;
                 hit = candidate;
                 nearest = candidate.distance;
@@ -73,9 +73,10 @@ public class ConsoleInteractable : MonoBehaviour
         return hit.collider != null;
     }
 
-    private static bool IsAimSurface(Collider collider, PlayerMovement player)
+    private static bool IsAimSurface(Collider collider, PlayerMovement player, bool includeTaggedItems)
     {
         return !collider.transform.IsChildOf(player.transform) &&
-            (!collider.isTrigger || collider.GetComponentInParent<ConsoleInteractable>() != null);
+            (!collider.isTrigger || collider.GetComponentInParent<ConsoleInteractable>() != null ||
+             (includeTaggedItems && (collider.attachedRigidbody != null ? collider.attachedRigidbody.gameObject : collider.gameObject).CompareTag("Item")));
     }
 }

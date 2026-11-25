@@ -75,7 +75,18 @@ public sealed class ManualCrankGenerator : MonoBehaviour
             return;
         }
 
-        _nearbyLocalPlayer = FindNearbyLocalPlayer();
+        _nearbyLocalPlayer = _powerManager.IsBlackout ? FindNearbyLocalPlayer() : null;
+    }
+
+    internal static bool TryCloseLocalMinigame()
+    {
+        foreach (var crank in FindObjectsByType<ManualCrankGenerator>(FindObjectsSortMode.None))
+        {
+            if (crank._activePlayer == null) continue;
+            crank.EndMinigame();
+            return true;
+        }
+        return false;
     }
 
     internal static bool TryInteract(PlayerMovement player)
@@ -96,23 +107,11 @@ public sealed class ManualCrankGenerator : MonoBehaviour
 
     private PlayerMovement FindNearbyLocalPlayer()
     {
-        PlayerMovement nearest = null;
-        float nearestDistance = GetCrankInteractionDistance();
-
-        foreach (PlayerMovement player in FindObjectsByType<PlayerMovement>(FindObjectsSortMode.None))
-        {
-            if (player == null || player.Object == null || !player.Object.IsValid || !player.IsLocalPlayer)
-                continue;
-
-            float distance = Vector3.Distance(player.transform.position, interactionPoint.position);
-            if (distance <= nearestDistance)
-            {
-                nearest = player;
-                nearestDistance = distance;
-            }
-        }
-
-        return nearest;
+        NetworkRunner runner = _powerManager.Runner;
+        if (!runner.TryGetPlayerObject(runner.LocalPlayer, out NetworkObject actor) ||
+            !actor.TryGetComponent(out PlayerMovement player)) return null;
+        return Vector3.Distance(player.transform.position, interactionPoint.position) <= GetCrankInteractionDistance()
+            ? player : null;
     }
 
     private void BeginMinigame(PlayerMovement player)
@@ -314,8 +313,7 @@ public sealed class ManualCrankGenerator : MonoBehaviour
 
         if (_powerManager.BackupPowerRemaining > 0f)
         {
-            PlayerMovement nearbyPlayer = FindNearbyLocalPlayer();
-            if (nearbyPlayer != null)
+            if (_nearbyLocalPlayer != null)
                 DrawPrompt($"임시 전력 공급 중  {_powerManager.BackupPowerRemaining:F0}초");
             return;
         }

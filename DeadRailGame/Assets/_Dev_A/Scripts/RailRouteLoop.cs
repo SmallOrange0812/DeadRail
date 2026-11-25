@@ -90,6 +90,7 @@ public sealed partial class RailRouteLoop : NetworkBehaviour
     private RailTravelPhase presentedPhase = (RailTravelPhase)(-1);
     private Camera[] playerCameras;
     private bool[] cameraStates;
+    private AudioListener[] suspendedListeners;
     private bool cinematicPlaying;
     private Camera departureCamera;
     private bool UsesOutdoorDepartureShot => Phase == RailTravelPhase.ExitTransition && !IsBlackout;
@@ -292,12 +293,14 @@ public sealed partial class RailRouteLoop : NetworkBehaviour
                 DefenseDelay = TickTimer.CreateFromSeconds(Runner, 10f);
             }
             CollectedSupplies |= 1 << index;
+            collector.Rpc_PlayPickupSound();
             return;
         }
         float amount = kind == FarmingSupplyKind.FuelCapacity || kind == FarmingSupplyKind.BatteryCapacity ? capacityUpgradeAmount : supplyAmount;
         if (train == null || !train.CollectSupply(kind, amount)) return;
         if (personalSupply) collector.RecordInventoryPickup(kind);
         CollectedSupplies |= 1 << index;
+        collector.Rpc_PlayPickupSound();
     }
 
     public FarmingSupplyKind GetSupplyKind(int index)
@@ -366,6 +369,7 @@ public sealed partial class RailRouteLoop : NetworkBehaviour
 
         Transform point = supplyPoints[index];
         GameObject model = Instantiate(prefab, point.position, point.rotation);
+        if (kind == FarmingSupplyKind.MedicalKit) model.transform.localScale *= 1.7f;
         model.transform.SetParent(point, true);
         Renderer[] renderers = model.GetComponentsInChildren<Renderer>();
         if (renderers.Length > 0)
@@ -520,23 +524,48 @@ public sealed partial class RailRouteLoop : NetworkBehaviour
 
     private void Update()
     {
+        // Standalone test scenes can run the proximity pickup without a terminal HUD.
+        if (TerminalUIManager.Instance != null && TerminalUIManager.Instance.isActiveAndEnabled) return;
         nearbySupply = -1;
-        if (!Ready || Phase != RailTravelPhase.Farming || (TerminalUIManager.Instance != null && TerminalUIManager.Instance.BlocksPlayerInput)) return;
-        PlayerRef local = Runner.LocalPlayer;
-        if (!Runner.TryGetPlayerObject(local, out NetworkObject player) || IsAboard(player.transform.position) ||
-            !player.TryGetComponent<PlayerMovement>(out var movement) || movement.IsDowned) return;
-        for (int i = 0; i < supplyPoints.Length; i++)
+        if (Ready && Phase == RailTravelPhase.Farming && Runner.TryGetPlayerObject(Runner.LocalPlayer, out var actor) &&
+            actor.TryGetComponent<PlayerMovement>(out var player))
+            UpdateSupplyFocus(player, null, out _);
+    }
+
+    internal Transform UpdateSupplyFocus(PlayerMovement player, Transform hit, out bool includeChildren)
+    {
+        includeChildren = false;
+        nearbySupply = -1;
+        if (player == null || !Ready || Phase != RailTravelPhase.Farming || player.IsDowned || IsAboard(player.transform.position))
+            return null;
+        for (int i = 0; i < supplyPoints.Length && i < 30; i++)
         {
-            if ((CollectedSupplies & (1 << i)) != 0 || Vector3.Distance(player.transform.position, supplyPoints[i].position) > 3f) continue;
+            if (!CanTakeSupply(i, player.transform.position)) continue;
+            if (nearbySupply < 0) nearbySupply = i;
+            if (hit == null || !hit.IsChildOf(supplyPoints[i])) continue;
             nearbySupply = i;
-            break;
+            GameObject model = supplyVisuals[i].instance;
+            includeChildren = model != null;
+            return model != null ? model.transform : supplyPoints[i];
         }
+        return null;
+    }
+
+    private bool CanTakeSupply(int index, Vector3 position)
+    {
+        if ((CollectedSupplies & (1 << index)) != 0 || (supplyPoints[index].position - position).sqrMagnitude > 9f)
+            return false;
+        FarmingSupplyKind kind = GetSupplyKind(index);
+        if (VisitNumber == 1 && kind == FarmingSupplyKind.Fuel)
+            return CargoFuelCarrier == PlayerRef.None && !FirstFuelDelivered;
+        TreadmillManager train = TreadmillManager.Instance;
+        return train != null && train.HasSpawned && train.HasRoomForSupply(kind);
     }
 
     internal bool TryCollectNearbySupply(PlayerMovement player)
     {
         if (!Ready || Phase != RailTravelPhase.Farming || nearbySupply < 0 ||
-            IsAboard(player.transform.position) || Vector3.Distance(player.transform.position, supplyPoints[nearbySupply].position) > 3f)
+            IsAboard(player.transform.position) || !CanTakeSupply(nearbySupply, player.transform.position))
             return false;
 
         Rpc_CollectSupply(nearbySupply);
@@ -582,9 +611,15 @@ public sealed partial class RailRouteLoop : NetworkBehaviour
         cinematicPlaying = true;
         playerCameras = FindObjectsByType<Camera>(FindObjectsSortMode.None);
         cameraStates = new bool[playerCameras.Length];
+        suspendedListeners = new AudioListener[playerCameras.Length];
         for (int i = 0; i < playerCameras.Length; i++)
         {
             cameraStates[i] = playerCameras[i].enabled;
+            if (playerCameras[i].TryGetComponent(out AudioListener listener) && listener.enabled)
+            {
+                suspendedListeners[i] = listener;
+                listener.enabled = false;
+            }
             playerCameras[i].enabled = false;
         }
         if (UsesOutdoorDepartureShot)
@@ -594,6 +629,7 @@ public sealed partial class RailRouteLoop : NetworkBehaviour
                 var cameraObject = new GameObject("Farming departure camera");
                 cameraObject.transform.SetParent(transform, false);
                 departureCamera = cameraObject.AddComponent<Camera>();
+                cameraObject.AddComponent<AudioListener>();
                 departureCamera.fieldOfView = 50f;
             }
             departureCamera.gameObject.SetActive(true);
@@ -619,7 +655,11 @@ public sealed partial class RailRouteLoop : NetworkBehaviour
         if (transitionDirector != null) transitionDirector.Stop();
         if (referenceLayout != null) referenceLayout.SetActive(false);
         foreach (GameObject obj in cinematicObjects) if (obj != null) obj.SetActive(false);
-        for (int i = 0; i < playerCameras.Length; i++) if (playerCameras[i] != null) playerCameras[i].enabled = cameraStates[i];
+        for (int i = 0; i < playerCameras.Length; i++)
+        {
+            if (playerCameras[i] != null) playerCameras[i].enabled = cameraStates[i];
+            if (suspendedListeners[i] != null) suspendedListeners[i].enabled = true;
+        }
         cinematicPlaying = false;
     }
 

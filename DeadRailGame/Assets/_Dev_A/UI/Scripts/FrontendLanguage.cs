@@ -26,7 +26,27 @@ internal sealed class FrontendLanguage
         ["Play"] = "플레이",
         ["Settings"] = "설정",
         ["How to play"] = "플레이 방법",
+        ["Keep the train running"] = "열차 운행 목표",
+        ["Choose a role in the lobby. Check the routes on the radar and keep the train supplied with fuel and power between stops."] =
+            "로비에서 역할을 고르세요. 팀원들과 레이더로 경로를 확인하고 연료와 전력을 확보해 다음 정차지까지 열차를 운행하세요.",
+        ["Approach the junction"] = "분기점 통과",
+        ["Read the speed sign with the searchlight. The driver matches that speed while the gunner hits the track switch with the roof harpoon to select a branch."] =
+            "탐조등으로 표지판을 비춰 진입 속도를 읽으세요. 운전 담당은 속도를 맞추고, 전투 담당은 지붕의 작살로 선로 전환기를 맞혀 갈 길을 선택하세요.",
+        ["Supply stop"] = "첫 정차지에서 보급하기",
+        ["At the first stop, press F to pick up the fuel can. This brings zombies to the train. Guard the rear cargo door while the carrier steps aboard and presses F there to load it."] =
+            "연료통 옆에서 F를 누르면 운반을 시작하고 좀비가 몰려옵니다. 운반 담당은 열차에 올라 뒤쪽 화물문에서 F로 연료통을 싣고, 나머지 팀원은 화물문을 지키세요.",
+        ["Get everyone aboard"] = "팀원 구조와 재출발",
+        ["Press F near a downed crewmate to revive them. If everyone goes down, the run ends. After the defense, regroup on the train so the driver can depart."] =
+            "쓰러진 팀원 곁에서 F를 눌러 일으키세요. 전원이 쓰러지면 운행에 실패합니다. 방어를 마치면 모두 열차에 오르세요. 전원이 탑승해야 운전 담당이 출발할 수 있습니다.",
+        ["Left click"] = "마우스 왼쪽",
+        ["Toggle zoom"] = "확대 / 원래 시야",
         ["CREDITS"] = "제작진",
+        ["Developer A  /  Network, systems & UI"] = "개발자 A  /  네트워크 · 시스템 · UI",
+        ["Photon matchmaking, P1/P4 terminal and radar UI, blackout transitions and resource consumption."] =
+            "Photon 룸 매치메이킹, P1/P4 터미널·레이더 UI, 정전 상태 전환과 글리치 연출, 자원 소모 로직",
+        ["Developer B  /  Physics, action & animation"] = "개발자 B  /  물리 · 액션 · 애니메이션",
+        ["Scrolling track, P2/P3 hitscan and harpoon, Animator and IK setup, battery pickup and drop physics."] =
+            "트레드밀 맵 스크롤, P2/P3 히트스캔 사격·작살총, Animator·IK 세팅, 배터리 들기·놓기 물리",
         ["Lobby list"] = "방 목록",
         ["Create room"] = "방 만들기",
         ["Join room"] = "방 참가",

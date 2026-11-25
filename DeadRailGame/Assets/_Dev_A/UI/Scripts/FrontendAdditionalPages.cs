@@ -16,6 +16,7 @@ internal sealed class FrontendAdditionalPages
     private static readonly Color Ink = new Color(0.96f, 0.92f, 0.87f);
     private static readonly int[] CardPositions = { 128, 458, 785, 1117 };
     private const string Preferences = "DeadRail.Frontend.";
+    private const int DefaultFrameRate = 60;
     private readonly FrontendMenu menu;
     private readonly Font font;
     private readonly Transform parent;
@@ -23,6 +24,9 @@ internal sealed class FrontendAdditionalPages
     private readonly FrontendBackdrop backdrop;
     private readonly Action<int> changeLanguage;
     private readonly GameObject roomPage, settingsPage;
+    private GameObject guidePage, creditsPage;
+    internal Button GuideBack { get; private set; }
+    internal Button CreditsBack { get; private set; }
     private readonly RectTransform settings;
     private readonly Text roomName, roomCount, chatHistory, roomStatus;
     private readonly Text[] slots = new Text[4];
@@ -174,7 +178,7 @@ internal sealed class FrontendAdditionalPages
         int quality = PlayerPrefs.GetInt(Preferences + "Quality", QualitySettings.GetQualityLevel());
         if (quality >= 0 && quality < QualitySettings.names.Length) QualitySettings.SetQualityLevel(quality);
         QualitySettings.vSyncCount = PlayerPrefs.GetInt(Preferences + "VSync", QualitySettings.vSyncCount);
-        Application.targetFrameRate = PlayerPrefs.GetInt(Preferences + "FrameRate", Application.targetFrameRate);
+        Application.targetFrameRate = PlayerPrefs.GetInt(Preferences + "FrameRate", DefaultFrameRate);
         Application.runInBackground = PlayerPrefs.GetInt(Preferences + "Background", Application.runInBackground ? 1 : 0) != 0;
         if (!Application.isEditor && restoreDisplay &&
             PlayerPrefs.HasKey(Preferences + "DisplayMode"))
@@ -216,6 +220,101 @@ internal sealed class FrontendAdditionalPages
         if (roomPage != null) roomPage.SetActive(page == FrontendPage.Room);
         settingsPage.SetActive(page == FrontendPage.Settings);
         if (page == FrontendPage.Settings) BuildSettings(settingsTab);
+        if (page == FrontendPage.HowToPlay && guidePage == null) BuildGuide();
+        if (guidePage != null) guidePage.SetActive(page == FrontendPage.HowToPlay);
+        if (page == FrontendPage.Credits && creditsPage == null) BuildCredits();
+        if (creditsPage != null) creditsPage.SetActive(page == FrontendPage.Credits);
+    }
+
+    private RectTransform InformationPanel(RectTransform frame, string title, float width, float height)
+    {
+        RectTransform panel = ArtworkPanel(frame, title, "Settings_UI", 0, 0, width, height);
+        panel.anchorMin = panel.anchorMax = panel.pivot = new Vector2(.5f, .5f);
+        panel.anchoredPosition = Vector2.zero;
+
+        Box(panel, "Header stripe", 8, 8, 8, 94, Red);
+        GuideText(panel, title, 40, 12, width - 90, 80, 48, true);
+        Box(panel, "Header rule", 40, 101, width - 80, 2, Surface);
+        return panel;
+    }
+
+    private void BuildCredits()
+    {
+        creditsPage = CreatePage("Credits", out RectTransform frame);
+        RectTransform panel = InformationPanel(frame, "CREDITS", 1100, 560);
+        CreditRow(panel, 133, "20241257_안성훈", "Developer A  /  Network, systems & UI",
+            "Photon matchmaking, P1/P4 terminal and radar UI, blackout transitions and resource consumption.");
+        CreditRow(panel, 299, "20241233_박준혁", "Developer B  /  Physics, action & animation",
+            "Scrolling track, P2/P3 hitscan and harpoon, Animator and IK setup, battery pickup and drop physics.");
+        CreditsBack = InformationBack(panel, 920, 474);
+    }
+
+    private void CreditRow(RectTransform panel, float y, string name, string role, string detail)
+    {
+        RectTransform row = FramedBox(panel, name, 40, y, 1020, 143, Surface).rectTransform;
+        GuideText(row, name, 24, 34, 325, 60, 32, true);
+        Box(row, "Divider", 362, 20, 2, 103, Panel);
+        GuideText(row, role, 391, 16, 609, 44, 25, true);
+        GuideText(row, detail, 391, 64, 599, 75, 21);
+    }
+
+    private void BuildGuide()
+    {
+        guidePage = CreatePage("How to play", out RectTransform frame);
+        RectTransform panel = InformationPanel(frame, "How to play", 1300, 820);
+        GuideText(panel, "Keep the train running", 40, 120, 696, 54, 32, true);
+        GuideText(panel, "Choose a role in the lobby. Check the routes on the radar and keep the train supplied with fuel and power between stops.",
+            40, 175, 676, 100, 23);
+
+        GuideStep(panel, 282, "Approach the junction",
+            "Read the speed sign with the searchlight. The driver matches that speed while the gunner hits the track switch with the roof harpoon to select a branch.");
+        GuideStep(panel, 440, "Supply stop",
+            "At the first stop, press F to pick up the fuel can. This brings zombies to the train. Guard the rear cargo door while the carrier steps aboard and presses F there to load it.");
+        GuideStep(panel, 598, "Get everyone aboard",
+            "Press F near a downed crewmate to revive them. If everyone goes down, the run ends. After the defense, regroup on the train so the driver can depart.");
+
+        RectTransform controls = FramedBox(panel, "Controls panel", 755, 125, 505, 588, Surface).rectTransform;
+        GuideText(controls, "Controls", 24, 10, 455, 54, 32, true);
+        GuideControl(controls, 0, "W A S D / Mouse", "Move / look");
+        GuideControl(controls, 1, "Shift / Space", "Sprint / jump");
+        GuideControl(controls, 2, "F", "Interact");
+        GuideControl(controls, 3, "1 / 2", "Equip weapon / flashlight");
+        GuideControl(controls, 4, "Left click", "Fire");
+        GuideControl(controls, 5, "R", "Reload / console rescan");
+        GuideControl(controls, 6, "Z", "Toggle zoom");
+        GuideControl(controls, 7, "Tab", "Inventory");
+        GuideControl(controls, 8, "Esc", "Pause menu");
+
+        GuideBack = InformationBack(panel, 1120, 734);
+    }
+
+    private Button InformationBack(RectTransform panel, float x, float y)
+    {
+        Button back = ArtworkButton(panel, "Back", "Back_BT", x, y, 140, 60, () => menu.SetPage(FrontendPage.Title));
+        language.BindArtwork(back.targetGraphic, "Back", new Rect(.39f, .14f, .50f, .7f), .91f, 26);
+        return back;
+    }
+
+    private void GuideStep(RectTransform panel, float y, string heading, string body)
+    {
+        Box(panel, heading + " stripe", 40, y + 7, 5, 31, Red);
+        GuideText(panel, heading, 57, y, 665, 44, 28, true);
+        GuideText(panel, body, 57, y + 48, 659, 108, 23);
+    }
+
+    private void GuideControl(RectTransform controls, int row, string key, string action)
+    {
+        float y = 75 + row * 56;
+        RectTransform cap = FramedBox(controls, key, 20, y, 190, 41, Panel).rectTransform;
+        language.Bind(Label(cap, "Key", 3, 0, 184, 41, 20, TextAnchor.MiddleCenter), key);
+        language.Bind(Label(controls, action, 224, y, 270, 42, 21), action);
+    }
+
+    private void GuideText(RectTransform panel, string copy, float x, float y, float w, float h, int size, bool bold = false)
+    {
+        Text text = Label(panel, copy, x, y, w, h, size, TextAnchor.UpperLeft);
+        text.fontStyle = bold ? FontStyle.Bold : FontStyle.Normal;
+        language.Bind(text, copy);
     }
 
     internal void EnterRoom(bool host, string name)
@@ -318,7 +417,7 @@ internal sealed class FrontendAdditionalPages
                         Mathf.Max(0, selected), index => SetDisplay(modes[index].width, modes[index].height, Screen.fullScreenMode));
                 }
                 else Info(0, "Resolution", $"{Screen.width} × {Screen.height}");
-                int frameRate = Mathf.Clamp(Application.targetFrameRate > 0 ? Application.targetFrameRate : 60, 30, 240);
+                int frameRate = Mathf.Clamp(Application.targetFrameRate > 0 ? Application.targetFrameRate : DefaultFrameRate, 30, 240);
                 SliderSetting(1, "Frame rate limit (VSync off)", 30, 240, frameRate, value =>
                 {
                     Application.targetFrameRate = Mathf.RoundToInt(value);
@@ -391,7 +490,7 @@ internal sealed class FrontendAdditionalPages
         muted = highContrast = largerText = false;
         if (QualitySettings.names.Length > 0) QualitySettings.SetQualityLevel(Mathf.Min(2, QualitySettings.names.Length - 1));
         QualitySettings.vSyncCount = 1;
-        Application.targetFrameRate = 60;
+        Application.targetFrameRate = DefaultFrameRate;
         Application.runInBackground = false;
         blurRadius = 4f;
         backdrop?.SetBlurRadius(blurRadius);
@@ -404,7 +503,7 @@ internal sealed class FrontendAdditionalPages
         Save("Contrast", 0);
         Save("LargeText", 0);
         Save("VSync", 1);
-        Save("FrameRate", 60);
+        Save("FrameRate", DefaultFrameRate);
         Save("Background", 0);
         Save("Quality", QualitySettings.GetQualityLevel());
         ApplyAudio();

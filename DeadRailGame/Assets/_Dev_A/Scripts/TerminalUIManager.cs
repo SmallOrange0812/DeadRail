@@ -42,7 +42,7 @@ public class TerminalUIManager : MonoBehaviour
 
     private void Update()
     {
-        if (GamePauseMenu.BlocksGameplayInput) return;
+        if (GamePauseMenu.BlocksGameplayInput || _closedFrame == Time.frameCount) return;
         if (Input.GetKeyDown(KeyCode.Tab))
         {
             if (_inventoryOpen) CloseAllTerminals();
@@ -65,15 +65,38 @@ public class TerminalUIManager : MonoBehaviour
     {
         _aimedConsole = null;
         _aimedDoorSwitch = null;
-        if (!_isUiOpen && CanOpenUi() && ConsoleInteractable.TryGetAimedHit(_localPlayer, out RaycastHit hit))
+        bool canAim = !_isUiOpen && CanOpenUi(allowHarpoon: true);
+        bool onFoot = canAim && _localPlayer.CanUsePersonalEquipment;
+        Transform harpoonItem = null;
+        Transform hitSurface = null;
+        if (canAim && ConsoleInteractable.TryGetAimedHit(_localPlayer, out RaycastHit hit, includeTaggedItems: !onFoot))
         {
-            _aimedConsole = ConsoleInteractable.GetConsoleFromHit(_localPlayer, hit);
-            TrainDoorSwitch button = hit.collider.GetComponent<TrainDoorSwitch>();
-            if (button != null && button.IsInReach(_localPlayer.transform.position))
-                _aimedDoorSwitch = button;
+            if (onFoot)
+            {
+                hitSurface = hit.collider.transform;
+                _aimedConsole = ConsoleInteractable.GetConsoleFromHit(_localPlayer, hit);
+                TrainDoorSwitch button = hit.collider.GetComponent<TrainDoorSwitch>();
+                if (button != null && button.IsInReach(_localPlayer.transform.position))
+                    _aimedDoorSwitch = button;
+            }
+            else if (hit.transform.CompareTag("Item") && _localPlayer.TryGetComponent(out HarpoonFarming harpoon) &&
+                     harpoon.CanHighlightPickup(hit.distance))
+                harpoonItem = hit.transform;
         }
-        _aimOutline?.Show(_aimedDoorSwitch != null ? _aimedDoorSwitch.transform : _aimedConsole?.transform,
-            _aimedDoorSwitch == null);
+        Transform target = _aimedDoorSwitch != null ? _aimedDoorSwitch.transform :
+            _aimedConsole != null ? _aimedConsole.transform : harpoonItem;
+        bool includeChildren = _aimedDoorSwitch == null;
+        if (RailRouteLoop.Instance != null)
+        {
+            Transform supply = RailRouteLoop.Instance.UpdateSupplyFocus(onFoot ? _localPlayer : null,
+                target == null ? hitSurface : null, out bool useSupplyChildren);
+            if (supply != null)
+            {
+                target = supply;
+                includeChildren = useSupplyChildren;
+            }
+        }
+        _aimOutline?.Show(target, includeChildren);
     }
 
     internal bool TryInteractWithAimedTarget(PlayerMovement player, out bool useSearchlight)
@@ -128,7 +151,7 @@ public class TerminalUIManager : MonoBehaviour
         _ => null
     };
 
-    private bool CanOpenUi()
+    private bool CanOpenUi(bool allowHarpoon = false)
     {
         if (GamePauseMenu.BlocksGameplayInput) return false;
         RailRouteLoop route = RailRouteLoop.Instance;
@@ -149,7 +172,8 @@ public class TerminalUIManager : MonoBehaviour
             return false;
 
         return !_localPlayer.TryGetComponent(out EquipmentPivotController equipment)
-            || equipment.CurrentMode == EquipmentPivotController.EquipmentMode.None;
+            || equipment.CurrentMode == EquipmentPivotController.EquipmentMode.None
+            || (allowHarpoon && equipment.CurrentMode == EquipmentPivotController.EquipmentMode.P3_HarpoonMount);
     }
 
     private void SetPanels(GameObject terminal, bool showInventory)

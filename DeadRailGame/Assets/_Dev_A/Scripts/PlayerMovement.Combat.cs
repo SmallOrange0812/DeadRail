@@ -16,8 +16,13 @@ public partial class PlayerMovement
     [Networked] private TickTimer ShotCooldown { get; set; }
     [Networked] private TickTimer ReloadTimer { get; set; }
     [Networked] private int WeakPointHits { get; set; }
+    [Networked] private int FootstepGait { get; set; }
 
     private GameObject weaponVisual;
+    private WeaponFlash muzzleFlash;
+    private AudioSource footsteps, gunshot, reload;
+    private AudioSource pickupSound, hurtSound;
+    private TickTimer heardShot, heardReload;
     private EquipmentPivotController combatEquipment;
     private FlashlightToggle personalLight;
     private int shownWeakPointHits;
@@ -49,6 +54,13 @@ public partial class PlayerMovement
 
     private void InitializeCombat()
     {
+        footsteps = GameAudio.Attach(gameObject, "footsteps", .48f, 1.5f, 15f, true);
+        gunshot = GameAudio.Attach(gameObject, "gunshot", .74f, 3f, 65f);
+        reload = GameAudio.Attach(gameObject, "gun-reload", .6f, 1.5f, 12f);
+        pickupSound = GameAudio.Attach(gameObject, "item-pickup", .65f, 1.5f, 12f);
+        hurtSound = GameAudio.Attach(gameObject, "hurt", .75f, 2f, 18f);
+        heardShot = ShotCooldown;
+        heardReload = ReloadTimer;
         combatEquipment = GetComponent<EquipmentPivotController>();
         personalLight = GetComponent<FlashlightToggle>();
         if (!HasStateAuthority) return;
@@ -91,14 +103,21 @@ public partial class PlayerMovement
 
     internal void ApplyZombieDamage(int damage)
     {
-        if (!HasStateAuthority || IsDowned) return;
+        if (!HasStateAuthority || IsDowned || damage <= 0) return;
         Health = Mathf.Max(0, Health - damage);
+        Rpc_PlayHurtSound();
         if (!IsDowned) return;
         ReloadTimer = default;
         if (combatEquipment != null && combatEquipment.CurrentMode != EquipmentPivotController.EquipmentMode.None)
             combatEquipment.TryToggleMode(combatEquipment.CurrentMode);
         if (personalLight != null) personalLight.SetPersonalLight(false);
     }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    internal void Rpc_PlayPickupSound() => pickupSound.PlayOneShot(pickupSound.clip);
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void Rpc_PlayHurtSound() => hurtSound.PlayOneShot(hurtSound.clip);
 
     private PlayerMovement FindReviveTarget()
     {
@@ -233,6 +252,7 @@ public partial class PlayerMovement
                     ? new Vector3(0.23f, -0.24f, IsRifle ? 0.59f : 0.47f)
                     : Vector3.zero;
                 if (firstPerson) weaponVisual.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
+                muzzleFlash = WeaponFlash.Attach(weaponVisual, IsRifle);
             }
         }
         bool show = CanFight && !FlashlightSelected && (!IsLocalPlayer || !isUsingTerminal);
@@ -242,6 +262,23 @@ public partial class PlayerMovement
             if (show && (!IsLocalPlayer || fpsCamera == null))
                 weaponVisual.transform.rotation = transform.rotation * Quaternion.Euler(CameraPitch, 0f, 0f) *
                     Quaternion.Euler(0f, 180f, 0f);
+        }
+        footsteps.pitch = FootstepGait == 2 ? 1.35f : 1f;
+        GameAudio.SetLoop(footsteps, FootstepGait != 0 && !IsDowned);
+        if (heardShot.TargetTick != ShotCooldown.TargetTick)
+        {
+            heardShot = ShotCooldown;
+            if (heardShot.IsRunning)
+            {
+                gunshot.PlayOneShot(gunshot.clip);
+                if (show && muzzleFlash != null) muzzleFlash.Fire();
+            }
+        }
+        if (heardReload.TargetTick != ReloadTimer.TargetTick)
+        {
+            heardReload = ReloadTimer;
+            if (heardReload.IsRunning) reload.Play();
+            else if (FlashlightSelected || !CanFight) reload.Stop();
         }
         if (!IsLocalPlayer || shownWeakPointHits == WeakPointHits) return;
         shownWeakPointHits = WeakPointHits;

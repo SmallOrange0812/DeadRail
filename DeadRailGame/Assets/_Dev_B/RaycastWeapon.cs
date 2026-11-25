@@ -139,7 +139,7 @@ public class RaycastWeapon : NetworkBehaviour
 
     private void OnGUI()
     {
-        if (!HasStateAuthority || !hasWeapon) return;
+        if (GamePauseMenu.BlocksGameplayInput || !HasStateAuthority || !hasWeapon) return;
 
         float x = Screen.width / 2f;
         float y = Screen.height / 2f;

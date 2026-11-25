@@ -9,7 +9,7 @@ using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using static FrontendLanguage;
 
-public enum FrontendPage { Title, Lobby, CreateRoom, Loading, Room, Settings }
+public enum FrontendPage { Title, Lobby, CreateRoom, Loading, Room, Settings, HowToPlay, Credits }
 
 public sealed class FrontendMenu : MonoBehaviour
 {
@@ -36,6 +36,7 @@ public sealed class FrontendMenu : MonoBehaviour
     private bool transitioning, connecting, finishing;
     private Font roomNameFont;
     private FrontendAdditionalPages additionalPages;
+    private Button howToPlayButton, creditsButton;
     internal FrontendLanguage Language { get; private set; }
 
     private void Awake()
@@ -66,6 +67,10 @@ public sealed class FrontendMenu : MonoBehaviour
         additionalPages = new FrontendAdditionalPages(this, roomNameFont);
         Button settings = titlePage.transform.Find("Settings")?.GetComponent<Button>();
         if (settings != null) settings.onClick.AddListener(() => SetPage(FrontendPage.Settings));
+        howToPlayButton = titlePage.transform.Find("How to play")?.GetComponent<Button>();
+        if (howToPlayButton != null) howToPlayButton.onClick.AddListener(() => SetPage(FrontendPage.HowToPlay));
+        creditsButton = titlePage.transform.Find("Credits")?.GetComponent<Button>();
+        if (creditsButton != null) creditsButton.onClick.AddListener(() => SetPage(FrontendPage.Credits));
         SceneManager.sceneLoaded += SceneLoaded;
         SetPage(gameObject.scene.path == TitleScene ? FrontendPage.Title : FrontendPage.Lobby);
         UpdateCount();
@@ -138,6 +143,7 @@ public sealed class FrontendMenu : MonoBehaviour
 
     public void SetPage(FrontendPage page)
     {
+        FrontendPage previous = Page;
         Page = page;
         titlePage.SetActive(page == FrontendPage.Title);
         lobbyPage.SetActive(page == FrontendPage.Lobby);
@@ -145,7 +151,14 @@ public sealed class FrontendMenu : MonoBehaviour
         loadingPage.SetActive(page == FrontendPage.Loading);
         additionalPages?.Show(page);
         if (Application.isPlaying) backdrop.SetBlurred(page != FrontendPage.Title);
-        if (menuEvents != null) menuEvents.SetSelectedGameObject(null);
+        if (menuEvents != null)
+        {
+            Button focus = page == FrontendPage.HowToPlay ? additionalPages.GuideBack :
+                page == FrontendPage.Credits ? additionalPages.CreditsBack : null;
+            if (page == FrontendPage.Title && previous == FrontendPage.HowToPlay) focus = howToPlayButton;
+            if (page == FrontendPage.Title && previous == FrontendPage.Credits) focus = creditsButton;
+            menuEvents.SetSelectedGameObject(focus != null ? focus.gameObject : null);
+        }
     }
 
     public void OpenLobby()
@@ -333,7 +346,8 @@ public sealed class FrontendMenu : MonoBehaviour
     private void Update()
     {
         if (Page == FrontendPage.Room) additionalPages.UpdateRoom();
-        if (Page == FrontendPage.Settings && Input.GetKeyDown(KeyCode.Escape))
+        if ((Page == FrontendPage.Settings || Page == FrontendPage.HowToPlay || Page == FrontendPage.Credits) &&
+            Input.GetKeyDown(KeyCode.Escape))
             SetPage(FrontendPage.Title);
     }
 

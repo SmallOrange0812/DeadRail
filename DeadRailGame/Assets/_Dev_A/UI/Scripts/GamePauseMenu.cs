@@ -35,13 +35,24 @@ public sealed class GamePauseMenu : MonoBehaviour
 
     private void Update()
     {
-        if (!Input.GetKeyDown(KeyCode.Escape) || page == Page.Leaving || network == null) return;
+        if (Input.GetKeyDown(KeyCode.Escape)) HandleEscape();
+    }
+
+    private void HandleEscape()
+    {
+        if (page == Page.Leaving) return;
         switch (page)
         {
             case Page.Closed:
-                if (!network.HasRunningSession) return;
+                var terminal = TerminalUIManager.Instance;
+                if (terminal != null && terminal.IsUiOpen)
+                {
+                    terminal.CloseAllTerminals();
+                    return;
+                }
+                if (ManualCrankGenerator.TryCloseLocalMinigame()) return;
+                if (network == null || !network.HasRunningSession) return;
                 if (overlay == null) BuildMenu();
-                TerminalUIManager.Instance?.CloseAllTerminals();
                 Show(Page.Menu);
                 break;
             case Page.Menu:

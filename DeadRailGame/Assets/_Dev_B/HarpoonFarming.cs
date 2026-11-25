@@ -27,6 +27,7 @@ public class HarpoonFarming : NetworkBehaviour
     [Networked] private Vector3 LineEnd { get; set; }
 
     private bool isFarming = false;
+    internal bool CanHighlightPickup(float distance) => !IsLineActive && distance <= maxDistance;
     private Camera[] playerCameras;
     private PlayerMovement playerMovement;
 
@@ -225,6 +226,7 @@ public class HarpoonFarming : NetworkBehaviour
         {
             hasHarpoon = true;
             Destroy(targetItem.gameObject);
+            if (playerMovement != null) playerMovement.Rpc_PlayPickupSound();
             Debug.Log("✅ 보급품 견인 및 획득 완료!");
         }
 
@@ -281,6 +283,7 @@ public class HarpoonFarming : NetworkBehaviour
 
     private void OnGUI()
     {
+        if (GamePauseMenu.BlocksGameplayInput) return;
         if (Object == null || !Object.IsValid || playerMovement == null || !playerMovement.IsLocalPlayer) return;
 
         float x = Screen.width / 2f;

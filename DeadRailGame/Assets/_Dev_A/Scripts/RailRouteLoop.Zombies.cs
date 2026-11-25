@@ -29,6 +29,7 @@ public sealed partial class RailRouteLoop
     private sealed class ZombieView
     {
         public GameObject Root;
+        public AudioSource Voice;
         public PlayableGraph Graph;
         public AnimationPlayableOutput Output;
         public AnimationClipPlayable Clip;
@@ -43,6 +44,7 @@ public sealed partial class RailRouteLoop
     private AnimationClip[] zombieClips;
     private readonly Dictionary<Material, Material> combatMaterials = new Dictionary<Material, Material>();
     private int renderedEncounter;
+    private TickTimer nextSpawnAttempt;
 
     internal GameObject GetPersonalWeapon(bool rifle) => rifle ? riflePrefab : pistolPrefab;
 
@@ -83,9 +85,13 @@ public sealed partial class RailRouteLoop
     {
         if (Phase != RailTravelPhase.Farming || zombiePrefab == null) return;
         bool firstDefense = VisitNumber == 1;
-        if (firstDefense && (!FuelDefenseTriggered || !DefenseDelay.Expired(Runner))) return;
-        if (EncounterVisit != VisitNumber)
+        if (EncounterVisit != VisitNumber && nextSpawnAttempt.ExpiredOrNotRunning(Runner))
+        {
             SpawnZombieEncounter();
+            nextSpawnAttempt = ZombieCount == 0 ? TickTimer.CreateFromSeconds(Runner, 0.5f) : default;
+        }
+        // The defenders are visible on arrival. Taking the fuel starts their attack countdown.
+        if (firstDefense && (!FuelDefenseTriggered || !DefenseDelay.Expired(Runner))) return;
 
         for (int i = 0; i < ZombieCount; i++)
         {
@@ -130,7 +136,6 @@ public sealed partial class RailRouteLoop
 
     private void SpawnZombieEncounter()
     {
-        EncounterVisit = VisitNumber;
         ZombieCount = 0;
         int wanted = ActiveMapDanger switch { 2 => 3, 3 => 4, 4 => 6, 5 => 8, _ => 2 };
         if (VisitNumber == 1) wanted = 3;
@@ -150,6 +155,7 @@ public sealed partial class RailRouteLoop
             Zombies.Set(ZombieCount, new ZombieState { Position = point, Yaw = -90f, Health = ZombieHealth });
             ZombieCount++;
         }
+        if (ZombieCount > 0) EncounterVisit = VisitNumber;
     }
 
     private void AttackCargoDoor(int index, ref ZombieState zombie)
@@ -249,6 +255,14 @@ public sealed partial class RailRouteLoop
                 : view.Root.transform.position + Vector3.up * 1.62f;
             view.Head.enabled = view.Body.enabled = zombie.Health > 0;
             int animation = zombie.Health <= 0 ? 3 : zombie.Animation;
+            if (zombie.Health <= 0)
+            {
+                if (view.Voice.isPlaying) view.Voice.Stop();
+            }
+            else if (newEncounter || view.Animation < 0 || (animation == 2 && view.Animation != 2))
+            {
+                if (!view.Voice.isPlaying) view.Voice.Play();
+            }
             if (view.Graph.IsValid() && (newEncounter || animation != view.Animation) &&
                 zombieClips[animation] != null)
             {
@@ -279,7 +293,8 @@ public sealed partial class RailRouteLoop
         body.radius = ZombieRadius;
         body.height = 1.43f;
         body.isTrigger = true;
-        var view = new ZombieView { Root = root, HeadBone = headBone, Head = head, Body = body };
+        var view = new ZombieView { Root = root, HeadBone = headBone, Head = head, Body = body,
+            Voice = GameAudio.Attach(root, "zombie", .55f, 1.5f, 25f) };
         if (animator != null && animator.runtimeAnimatorController != null)
         {
             if (zombieClips == null)

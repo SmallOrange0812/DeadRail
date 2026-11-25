@@ -59,6 +59,8 @@ public class TreadmillManager : NetworkBehaviour
     public bool isSpawned => HasSpawned;
     public RailRouteLoop RouteLoop { get; private set; }
     private TrainEntryDoors entryDoors;
+    private AudioSource trainSound, powerDown, rechargeSound;
+    private bool hadPower;
     internal bool EntryDoorsLocked => CurrentSpeed > 0f || (HasSpawned && TargetSpeed > 0f);
     internal bool CanUseDoorSwitch(int index, Vector3 position) =>
         entryDoors != null && entryDoors.CanUseSwitch(index, position);
@@ -116,6 +118,19 @@ public class TreadmillManager : NetworkBehaviour
             ResetTrainForRun();
 
         _hasSpawned = true;
+        GameObject train = RouteLoop != null && RouteLoop.trainTransform != null ? RouteLoop.trainTransform.gameObject : gameObject;
+        trainSound = GameAudio.Attach(train, "train", .45f, 10f, 75f, true);
+        powerDown = GameAudio.Attach(train, "power-down", .8f, 10f, 55f);
+        rechargeSound = GameAudio.Attach(train, "recharge-sound", .65f, 6f, 38f);
+        hadPower = HasPower;
+    }
+
+    public override void Despawned(NetworkRunner runner, bool hasState)
+    {
+        if (trainSound != null) Destroy(trainSound);
+        if (powerDown != null) Destroy(powerDown);
+        if (rechargeSound != null) Destroy(rechargeSound);
+        _hasSpawned = false;
     }
 
     internal const int AmmunitionPerPickup = 30;
@@ -161,9 +176,16 @@ public class TreadmillManager : NetworkBehaviour
         if (HasStateAuthority) RepairKits = Mathf.Max(0, RepairKits - 1);
     }
 
+    internal bool HasRoomForSupply(FarmingSupplyKind kind) => kind switch
+    {
+        FarmingSupplyKind.Fuel => Fuel < FuelCapacity,
+        FarmingSupplyKind.Battery => Battery < BatteryCapacity,
+        _ => true
+    };
+
     internal bool CollectSupply(FarmingSupplyKind kind, float amount)
     {
-        if (!HasStateAuthority || amount <= 0f) return false;
+        if (!HasStateAuthority || amount <= 0f || !HasRoomForSupply(kind)) return false;
         switch (kind)
         {
             case FarmingSupplyKind.FuelCapacity:
@@ -182,12 +204,11 @@ public class TreadmillManager : NetworkBehaviour
                 Ammunition += AmmunitionPerPickup;
                 break;
             case FarmingSupplyKind.Fuel:
-                if (Fuel >= FuelCapacity) return false;
                 Fuel = Mathf.Min(FuelCapacity, Fuel + amount);
                 break;
             case FarmingSupplyKind.Battery:
-                if (Battery >= BatteryCapacity) return false;
                 Battery = Mathf.Min(BatteryCapacity, Battery + amount);
+                Rpc_PlayRechargeSound();
                 break;
             default:
                 return false;
@@ -269,6 +290,11 @@ public class TreadmillManager : NetworkBehaviour
     public override void Render()
     {
         if (entryDoors != null) entryDoors.Present(DoorClosure);
+        if (!HasSpawned) return;
+        trainSound.pitch = Mathf.Lerp(.82f, 1.12f, Mathf.Clamp01(CurrentSpeed / 100f));
+        GameAudio.SetLoop(trainSound, CurrentSpeed > .1f);
+        if (hadPower && !HasPower) powerDown.Play();
+        hadPower = HasPower;
     }
 
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
@@ -315,6 +341,7 @@ public class TreadmillManager : NetworkBehaviour
             if (CrankProgress >= 1f)
             {
                 BackupPowerRemaining = Mathf.Max(1f, backupPowerDuration);
+                Rpc_PlayRechargeSound();
                 CrankProgress = 0f;
                 Debug.Log("수동 크랭크 발전기: 임시 전력이 복구되었습니다.");
             }
@@ -324,6 +351,9 @@ public class TreadmillManager : NetworkBehaviour
             CrankProgress = Mathf.Max(0f, CrankProgress - 0.04f);
         }
     }
+
+    [Rpc(RpcSources.StateAuthority, RpcTargets.All)]
+    private void Rpc_PlayRechargeSound() => rechargeSound.Play();
 
     [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
     public void Rpc_SetCrankUser(PlayerRef player, NetworkBool isUsing)

@@ -59,6 +59,7 @@ public partial class PlayerMovement : NetworkBehaviour
     [Header("마우스 회전 설정")]
     public float mouseSensitivity = 2f;
     [Networked] public float CameraPitch { get; set; }
+    private PropertyReader<float> _cameraPitchReader;
 
     [Header("분기점 연출 및 탐조등 카메라 전환 연동용")]
     [HideInInspector] public float ExternalCameraRoll = 0f;
@@ -209,6 +210,13 @@ public partial class PlayerMovement : NetworkBehaviour
         InitializeCombat();
         if (IsLocalPlayer)
         {
+            // This controller only moves on the host. Render the joining player's
+            // NetworkTransform between received states, just like other host-driven actors.
+            if (!HasStateAuthority)
+            {
+                Object.ForceRemoteRenderTimeframe = true;
+                _cameraPitchReader = GetPropertyReader<float>(nameof(CameraPitch));
+            }
             _mainCamera = Camera.main;
 
             if (fpsCamera != null)
@@ -217,6 +225,7 @@ public partial class PlayerMovement : NetworkBehaviour
                 fpsCamera.nearClipPlane = 0.25f;
                 normalFOV = fpsCamera.fieldOfView;
                 _targetFOV = normalFOV;
+                if (!fpsCamera.TryGetComponent<AudioListener>(out _)) fpsCamera.gameObject.AddComponent<AudioListener>();
                 fpsCamera.gameObject.SetActive(true);
             }
 
@@ -271,7 +280,13 @@ public partial class PlayerMovement : NetworkBehaviour
             else
             {
                 fpsCamera.transform.localPosition = _initFpsCamLocalPos + ExternalCameraShake;
-                fpsCamera.transform.localEulerAngles = new Vector3(CameraPitch, 0f, ExternalCameraRoll);
+                float pitch = CameraPitch;
+                if (!HasStateAuthority && TryGetSnapshotsBuffers(out var from, out var to, out float alpha))
+                {
+                    var (fromPitch, toPitch) = _cameraPitchReader.Read(from, to);
+                    pitch = Mathf.Lerp(fromPitch, toPitch, alpha);
+                }
+                fpsCamera.transform.localEulerAngles = new Vector3(pitch, 0f, ExternalCameraRoll);
             }
         }
     }
@@ -317,6 +332,7 @@ public partial class PlayerMovement : NetworkBehaviour
     public override void FixedUpdateNetwork()
     {
         if (!HasStateAuthority) return;
+        FootstepGait = 0;
         AdvanceReload();
         if (IsDowned)
         {
@@ -397,6 +413,9 @@ public partial class PlayerMovement : NetworkBehaviour
 
         velocity.y = _velocityY;
         _controller.Move(velocity * Runner.DeltaTime);
+        Vector3 actual = _controller.velocity;
+        if (_controller.isGrounded && move.sqrMagnitude > 0f && actual.x * actual.x + actual.z * actual.z > 0.04f)
+            FootstepGait = velocity.x * velocity.x + velocity.z * velocity.z > moveSpeed * moveSpeed * 1.1f ? 2 : 1;
 
         if (anim != null)
         {

@@ -7,6 +7,7 @@ internal sealed class AimOutline
     private readonly Material material;
     private readonly Dictionary<Transform, Renderer[]> targets = new();
     private readonly Dictionary<Mesh, Mesh> outlineMeshes = new();
+    private readonly List<Transform> removedTargets = new();
     private Renderer[] activeRenderers;
     private Transform activeTarget;
 
@@ -26,6 +27,11 @@ internal sealed class AimOutline
 
         if (!targets.TryGetValue(target, out activeRenderers))
         {
+            // Supply models can be replaced between stops or destroyed when reeled in.
+            foreach (Transform cached in targets.Keys)
+                if (cached == null) removedTargets.Add(cached);
+            foreach (Transform removed in removedTargets) targets.Remove(removed);
+            removedTargets.Clear();
             MeshFilter[] sources = includeChildren
                 ? target.GetComponentsInChildren<MeshFilter>()
                 : target.GetComponents<MeshFilter>();
